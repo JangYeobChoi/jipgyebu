@@ -30,7 +30,39 @@ function formatCost(num) {
   return '₩' + num.toLocaleString('ko-KR')
 }
 
-function ListScreen({ records, onSelect, onAddClick, loading }) {
+function LoginScreen() {
+  const [loading, setLoading] = useState(false)
+
+  async function handleGoogleLogin() {
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+    if (error) {
+      alert('로그인 중 오류가 발생했어요: ' + error.message)
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="app">
+      <div className="login-screen">
+        <div className="login-logo">🏠</div>
+        <h1 className="login-title">집계부</h1>
+        <p className="login-subtitle">우리 집 수리 내역을 한 곳에서 관리하세요</p>
+        <button className="google-login-btn" onClick={handleGoogleLogin} disabled={loading}>
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" />
+          {loading ? '로그인 중...' : 'Google로 시작하기'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) {
   const totalCount = records.length
   const totalCostThisYear = records.reduce((sum, r) => sum + r.cost, 0)
   const diyCount = records.filter((r) => r.diy).length
@@ -40,8 +72,12 @@ function ListScreen({ records, onSelect, onAddClick, loading }) {
       <div className="header">
         <div className="header-top">
           <span className="app-title">집계부</span>
-          <button className="add-btn" onClick={onAddClick}>+ 내역 추가</button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button className="add-btn" onClick={onAddClick}>+ 내역 추가</button>
+            <button className="logout-btn" onClick={onLogout}>로그아웃</button>
+          </div>
         </div>
+        <div className="user-info">안녕하세요, {user?.email?.split('@')[0]}님 👋</div>
         <div className="stats-row">
           <div className="stat-card">
             <div className="stat-label">총 수리 건수</div>
@@ -80,11 +116,9 @@ function ListScreen({ records, onSelect, onAddClick, loading }) {
             </div>
             <div className="record-cost">{formatCost(record.cost)}</div>
           </div>
-
           <div className="record-bottom">
             <span className="tag tag-location">📍 {record.location}</span>
           </div>
-
           <div className="lifecycle-bar-wrap">
             <div className="lifecycle-label">
               <span>수명주기</span>
@@ -172,7 +206,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
                 <div className="contact-num">{record.vendor_phone}</div>
               </div>
             </div>
-            <div className="call-btn" onClick={() => alert(`${record.vendor_phone} 로 전화 연결 (실제 앱 기준)`)}>📞</div>
+            <div className="call-btn" onClick={() => alert(`${record.vendor_phone} 로 전화 연결`)}>📞</div>
           </div>
         </div>
       )}
@@ -191,13 +225,10 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
 
 function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceDelete }) {
   const isEditing = !!editingRecord
-
   const [name, setName] = useState(editingRecord?.name || '')
   const [space, setSpace] = useState(editingRecord?.location || '')
-  
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
-  
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [cost, setCost] = useState(editingRecord?.cost ? String(editingRecord.cost) : '')
   const [category, setCategory] = useState(editingRecord?.category || '')
@@ -208,21 +239,13 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit() {
-    if (!name.trim()) {
-      alert('항목명을 입력해주세요')
-      return
-    }
-    if (!space) {
-      alert('공간을 선택해주세요')
-      return
-    }
-
+    if (!name.trim()) { alert('항목명을 입력해주세요'); return }
+    if (!space) { alert('공간을 선택해주세요'); return }
     setSaving(true)
-
     const dateObj = new Date(date)
     const dateLabel = `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월`
     const catInfo = categories.find((c) => c.value === category) || categories[0]
-
+    const { data: { user } } = await supabase.auth.getUser()
     const recordData = {
       name: name.trim(),
       icon: categoryIcons[catInfo.value] || '🛠️',
@@ -235,40 +258,17 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
       vendor_name: diy ? null : vendorName,
       vendor_phone: diy ? null : vendorPhone,
       memo: memo.trim() || '메모 없음',
+      user_id: user.id,
     }
-
     if (isEditing) {
-      const { data, error } = await supabase
-        .from('repairs')
-        .update(recordData)
-        .eq('id', editingRecord.id)
-        .select()
-
+      const { data, error } = await supabase.from('repairs').update(recordData).eq('id', editingRecord.id).select()
       setSaving(false)
-
-      if (error) {
-        alert('수정 중 오류가 발생했어요: ' + error.message)
-        return
-      }
-
+      if (error) { alert('수정 중 오류: ' + error.message); return }
       onSave(data[0])
     } else {
-      const newRecord = {
-        ...recordData,
-        lifecycle_percent: 0,
-        lifecycle_label: '등록 직후',
-        lifecycle_status: 'good',
-      }
-
-      const { data, error } = await supabase.from('repairs').insert(newRecord).select()
-
+      const { data, error } = await supabase.from('repairs').insert({ ...recordData, lifecycle_percent: 0, lifecycle_label: '등록 직후', lifecycle_status: 'good' }).select()
       setSaving(false)
-
-      if (error) {
-        alert('저장 중 오류가 발생했어요: ' + error.message)
-        return
-      }
-
+      if (error) { alert('저장 중 오류: ' + error.message); return }
       onSave(data[0])
     }
   }
@@ -281,48 +281,24 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
           <span className="header-title">{isEditing ? '내역 수정' : '새 수리 내역'}</span>
         </div>
       </div>
-
       <div className="form-body">
         <div className="field">
           <div className="field-label">항목명</div>
-          <input
-            type="text"
-            placeholder="예: 보일러 필터 교체"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <input type="text" placeholder="예: 보일러 필터 교체" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-
         <div className="field">
           <div className="field-label">공간</div>
           <div className="space-grid">
             {spaces.map((s) => (
-              <div
-                key={s.id}
-                className={`space-btn ${space === s.name ? 'active' : ''}`}
-                onClick={() => setSpace(s.name)}
-              >
+              <div key={s.id} className={`space-btn ${space === s.name ? 'active' : ''}`} onClick={() => setSpace(s.name)}>
                 {s.name}
                 {!s.is_default && (
-                  <span
-                    className="space-delete"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSpaceDelete(s.id)
-                    }}
-                  >✕</span>
+                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }}>✕</span>
                 )}
               </div>
             ))}
-            <div
-              className="space-btn space-btn-add"
-              onClick={() => setShowCustomInput(true)}
-            >
-              + 추가
-            </div>
+            <div className="space-btn space-btn-add" onClick={() => setShowCustomInput(true)}>+ 추가</div>
           </div>
-          
-
           {showCustomInput && (
             <div className="custom-space-row">
               <input
@@ -332,59 +308,35 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
                 onChange={(e) => setCustomInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && customInput.trim()) {
-                    onSpaceAdd(customInput.trim())
-                    setSpace(customInput.trim())
-                    setCustomInput('')
-                    setShowCustomInput(false)
+                    onSpaceAdd(customInput.trim()); setSpace(customInput.trim()); setCustomInput(''); setShowCustomInput(false)
                   }
                 }}
                 autoFocus
               />
-              <button
-                className="custom-space-confirm"
-                onClick={() => {
-                  if (customInput.trim()) {
-                    onSpaceAdd(customInput.trim())
-                    setSpace(customInput.trim())
-                    setCustomInput('')
-                    setShowCustomInput(false)
-                  }
-                }}
-              >
-                확인
-              </button>
+              <button className="custom-space-confirm" onClick={() => {
+                if (customInput.trim()) { onSpaceAdd(customInput.trim()); setSpace(customInput.trim()); setCustomInput(''); setShowCustomInput(false) }
+              }}>확인</button>
             </div>
           )}
         </div>
-
         <div className="field">
           <div className="field-label">날짜</div>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-
         <div className="field">
           <div className="field-label">비용</div>
           <div className="cost-row">
             <span className="cost-prefix">₩</span>
-            <input
-              type="number"
-              placeholder="0"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-            />
+            <input type="number" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} />
           </div>
         </div>
-
         <div className="field">
           <div className="field-label">카테고리</div>
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">선택하세요</option>
-            {categories.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
+            {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
-
         <div className="toggle-row">
           <div>
             <div className="toggle-label">직접 수리</div>
@@ -392,35 +344,18 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
           </div>
           <button className={`toggle ${diy ? 'on' : ''}`} onClick={() => setDiy(!diy)}></button>
         </div>
-
         {!diy && (
           <div className="vendor-box open">
             <div className="field-label">업체명</div>
-            <input
-              type="text"
-              placeholder="예: ○○소방설비"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-            />
+            <input type="text" placeholder="예: ○○소방설비" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
             <div className="field-label" style={{ marginTop: '4px' }}>업체 연락처</div>
-            <input
-              type="tel"
-              placeholder="010-0000-0000"
-              value={vendorPhone}
-              onChange={(e) => setVendorPhone(e.target.value)}
-            />
+            <input type="tel" placeholder="010-0000-0000" value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
           </div>
         )}
-
         <div className="field">
           <div className="field-label">메모</div>
-          <textarea
-            placeholder="추가로 기억해두고 싶은 내용을 적어요"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          ></textarea>
+          <textarea placeholder="추가로 기억해두고 싶은 내용을 적어요" value={memo} onChange={(e) => setMemo(e.target.value)}></textarea>
         </div>
-
         <button className="save-btn" onClick={handleSubmit} disabled={saving}>
           {saving ? '저장 중...' : isEditing ? '수정 완료' : '저장하기'}
         </button>
@@ -430,31 +365,38 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
 }
 
 function App() {
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [records, setRecords] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [screen, setScreen] = useState('list')
   const [selectedId, setSelectedId] = useState(null)
   const [editingRecord, setEditingRecord] = useState(null)
   const [spaces, setSpaces] = useState([])
 
   useEffect(() => {
-    fetchRecords()
-    fetchSpaces()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setAuthLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      fetchRecords()
+      fetchSpaces()
+    }
+  }, [user])
 
   async function fetchRecords() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('repairs')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error(error)
-      alert('데이터를 불러오는 중 오류가 발생했어요: ' + error.message)
-    } else {
-      setRecords(data)
-    }
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('repairs').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+    if (error) { console.error(error) } else { setRecords(data) }
     setLoading(false)
   }
 
@@ -463,28 +405,23 @@ function App() {
       .from('spaces')
       .select('*')
       .order('created_at', { ascending: true })
+    if (error) { console.error(error) } else { setSpaces(data) }
+  }
 
-    if (error) {
-      console.error(error)
-    } else {
-      setSpaces(data)
-    }
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    setRecords([])
+    setScreen('list')
   }
 
   const selectedRecord = records.find((r) => r.id === selectedId)
 
-  function handleSelect(id) {
-    setSelectedId(id)
-    setScreen('detail')
-  }
+  function handleSelect(id) { setSelectedId(id); setScreen('detail') }
 
   function handleSave(savedRecord) {
     const exists = records.some((r) => r.id === savedRecord.id)
-    if (exists) {
-      setRecords(records.map((r) => (r.id === savedRecord.id ? savedRecord : r)))
-    } else {
-      setRecords([savedRecord, ...records])
-    }
+    if (exists) { setRecords(records.map((r) => r.id === savedRecord.id ? savedRecord : r)) }
+    else { setRecords([savedRecord, ...records]) }
     setEditingRecord(null)
     setScreen('list')
   }
@@ -492,17 +429,14 @@ function App() {
   async function handleDelete(id) {
     const confirmed = confirm('정말 삭제하시겠어요?')
     if (!confirmed) return
-
     const { error } = await supabase.from('repairs').delete().eq('id', id)
-
-    if (error) {
-      alert('삭제 중 오류가 발생했어요: ' + error.message)
-      return
-    }
-
+    if (error) { alert('삭제 중 오류: ' + error.message); return }
     setRecords(records.filter((r) => r.id !== id))
     setScreen('list')
   }
+
+  if (authLoading) return <div className="app"><div className="empty-hint" style={{paddingTop:'40px'}}>로딩 중...</div></div>
+  if (!user) return <LoginScreen />
 
   if (screen === 'detail' && selectedRecord) {
     return (
@@ -510,10 +444,7 @@ function App() {
         record={selectedRecord}
         onBack={() => setScreen('list')}
         onDelete={() => handleDelete(selectedRecord.id)}
-        onEdit={() => {
-          setEditingRecord(selectedRecord)
-          setScreen('add')
-        }}
+        onEdit={() => { setEditingRecord(selectedRecord); setScreen('add') }}
       />
     )
   }
@@ -521,25 +452,17 @@ function App() {
   if (screen === 'add') {
     return (
       <AddScreen
-        onBack={() => {
-          setEditingRecord(null)
-          setScreen(editingRecord ? 'detail' : 'list')
-        }}
+        onBack={() => { setEditingRecord(null); setScreen(editingRecord ? 'detail' : 'list') }}
         onSave={handleSave}
         editingRecord={editingRecord}
         spaces={spaces}
         onSpaceAdd={async (name) => {
-          const { data, error } = await supabase
-            .from('spaces')
-            .insert({ name, is_default: false })
-            .select()
+          const { data: { user } } = await supabase.auth.getUser()
+          const { data, error } = await supabase.from('spaces').insert({ name, is_default: false, user_id: user.id }).select()
           if (!error) setSpaces([...spaces, data[0]])
         }}
         onSpaceDelete={async (id) => {
-          const { error } = await supabase
-            .from('spaces')
-            .delete()
-            .eq('id', id)
+          const { error } = await supabase.from('spaces').delete().eq('id', id)
           if (!error) setSpaces(spaces.filter((s) => s.id !== id))
         }}
       />
@@ -551,6 +474,8 @@ function App() {
       records={records}
       onSelect={handleSelect}
       onAddClick={() => setScreen('add')}
+      onLogout={handleLogout}
+      user={user}
       loading={loading}
     />
   )
