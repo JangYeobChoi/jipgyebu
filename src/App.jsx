@@ -401,10 +401,7 @@ function App() {
   }
 
   async function fetchSpaces() {
-    const { data, error } = await supabase
-      .from('spaces')
-      .select('*')
-      .order('created_at', { ascending: true })
+    const { data, error } = await supabase.from('spaces').select('*').order('created_at', { ascending: true })
     if (error) { console.error(error) } else { setSpaces(data) }
   }
 
