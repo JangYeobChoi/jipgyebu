@@ -69,6 +69,9 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
 
   return (
     <div className="app">
+      <div className="beta-banner">
+        ⚠️ 현재 베타 버전입니다. 데이터가 예고 없이 삭제될 수 있어요.
+      </div>
       <div className="header">
         <div className="header-top">
           <span className="app-title">집계부</span>
