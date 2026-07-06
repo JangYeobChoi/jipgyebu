@@ -3,9 +3,15 @@ import { supabase } from './supabaseClient'
 import './App.css'
 
 const categoryColors = {
-  replace: '#FAEEDA',
-  install: '#EAF3DE',
-  repair: '#E6F1FB',
+  replace: '#EFDFB0',
+  install: '#D7E2C0',
+  repair: '#C7D9E6',
+}
+
+const categoryRing = {
+  replace: '#96731F',
+  install: '#4C6B27',
+  repair: '#2F5E82',
 }
 
 const categoryIcons = {
@@ -15,9 +21,9 @@ const categoryIcons = {
 }
 
 const lifecycleColors = {
-  good: '#639922',
-  ok: '#378ADD',
-  warn: '#BA7517',
+  good: '#4C7A2E',
+  ok: '#2F6690',
+  warn: '#B06423',
 }
 
 const categories = [
@@ -109,7 +115,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
         <div className="record-card" key={record.id} onClick={() => onSelect(record.id)}>
           <div className="record-top">
             <div className="record-left">
-              <div className="category-dot" style={{ background: categoryColors[record.category] }}>
+              <div className="category-dot" style={{ background: categoryColors[record.category], color: categoryRing[record.category] }}>
                 {record.icon}
               </div>
               <div>
@@ -155,7 +161,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
 
       <div className="hero">
         <div className="hero-top">
-          <div className="hero-icon" style={{ background: categoryColors[record.category] }}>{record.icon}</div>
+          <div className="hero-icon" style={{ background: categoryColors[record.category], color: categoryRing[record.category] }}>{record.icon}</div>
           <div>
             <div className="hero-name">{record.name}</div>
             <div className="hero-sub">{record.location} · {record.date}</div>
