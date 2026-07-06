@@ -57,7 +57,7 @@ function LoginScreen() {
     <div className="app">
       <div className="login-screen">
         <div className="login-logo">🏠</div>
-        <h1 className="login-title">집계부</h1>
+        <h1 className="login-title">집로그</h1>
         <p className="login-subtitle">우리 집 수리 내역을 한 곳에서 관리하세요</p>
         <button className="google-login-btn" onClick={handleGoogleLogin} disabled={loading}>
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" />
@@ -80,7 +80,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
       </div>
       <div className="header">
         <div className="header-top">
-          <span className="app-title">집계부</span>
+          <span className="app-title">집로그</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button className="add-btn" onClick={onAddClick}>+ 내역 추가</button>
             <button className="logout-btn" onClick={onLogout}>로그아웃</button>
