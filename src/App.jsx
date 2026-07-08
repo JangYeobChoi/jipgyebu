@@ -70,7 +70,10 @@ function LoginScreen() {
 
 function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) {
   const totalCount = records.length
-  const totalCostThisYear = records.reduce((sum, r) => sum + r.cost, 0)
+  const currentYear = new Date().getFullYear()
+  const totalCostThisYear = records
+    .filter((r) => parseInt((r.date || '').match(/^(\d{4})년/)?.[1], 10) === currentYear)
+    .reduce((sum, r) => sum + r.cost, 0)
   const diyCount = records.filter((r) => r.diy).length
 
   return (
