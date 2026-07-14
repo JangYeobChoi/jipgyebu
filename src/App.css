@@ -79,18 +79,62 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
   color: var(--ink);
 }
 
-.section-label {
-  font-size: 12px;
-  color: var(--ink-soft);
-  padding: 18px 16px 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 600;
+.section-label-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 18px 16px 8px;
 }
-.section-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.section-label-text {
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.section-label-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.sort-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sort-dropdown::after {
+  content: '▾';
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.sort-dropdown select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 3px 18px 3px 6px;
+  cursor: pointer;
+}
+
+.sort-dropdown select:focus {
+  outline: none;
+  color: var(--ink);
+}
 
 .record-card {
   margin: 0 12px 10px;

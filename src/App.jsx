@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from './supabaseClient'
 import './App.css'
 
@@ -34,6 +34,12 @@ const categories = [
 
 function formatCost(num) {
   return '₩' + num.toLocaleString('ko-KR')
+}
+
+function parseDateValue(dateStr) {
+  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월/)
+  if (!match) return 0
+  return parseInt(match[1], 10) * 12 + parseInt(match[2], 10)
 }
 
 function LoginScreen() {
@@ -76,6 +82,15 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
     .reduce((sum, r) => sum + r.cost, 0)
   const diyCount = records.filter((r) => r.diy).length
 
+  const [sortOption, setSortOption] = useState('latest')
+  const sortedRecords = useMemo(() => {
+    const arr = [...records]
+    if (sortOption === 'latest') arr.sort((a, b) => parseDateValue(b.date) - parseDateValue(a.date))
+    else if (sortOption === 'oldest') arr.sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date))
+    else if (sortOption === 'costDesc') arr.sort((a, b) => b.cost - a.cost)
+    return arr
+  }, [records, sortOption])
+
   return (
     <div className="app">
       <div className="beta-banner">
@@ -106,7 +121,17 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
         </div>
       </div>
 
-      <div className="section-label">최근 내역</div>
+      <div className="section-label-row">
+        <span className="section-label-text">최근 내역</span>
+        <span className="section-label-line"></span>
+        <div className="sort-dropdown">
+          <select value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
+            <option value="latest">최신순</option>
+            <option value="oldest">오래된순</option>
+            <option value="costDesc">비용 높은순</option>
+          </select>
+        </div>
+      </div>
 
       {loading && <div className="empty-hint">불러오는 중...</div>}
 
@@ -114,7 +139,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
         <div className="empty-hint">아직 등록된 내역이 없어요. 첫 내역을 추가해보세요!</div>
       )}
 
-      {records.map((record) => (
+      {sortedRecords.map((record) => (
         <div className="record-card" key={record.id} onClick={() => onSelect(record.id)}>
           <div className="record-top">
             <div className="record-left">
