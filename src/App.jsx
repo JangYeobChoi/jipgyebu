@@ -42,6 +42,64 @@ function parseDateValue(dateStr) {
   return parseInt(match[1], 10) * 12 + parseInt(match[2], 10)
 }
 
+function getYearFromDate(dateStr) {
+  const match = (dateStr || '').match(/^(\d{4})년/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+function computeYearlyStats(records) {
+  const map = new Map()
+  records.forEach((r) => {
+    const year = getYearFromDate(r.date)
+    if (year === null) return
+    if (!map.has(year)) map.set(year, { year, count: 0, cost: 0 })
+    const entry = map.get(year)
+    entry.count += 1
+    entry.cost += r.cost
+  })
+  return Array.from(map.values()).sort((a, b) => b.year - a.year)
+}
+
+function csvEscape(value) {
+  const str = String(value ?? '')
+  if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"'
+  return str
+}
+
+function buildCSV(records) {
+  const headers = ['항목명', '공간', '날짜', '비용', '카테고리', '수리방식', '업체명', '업체연락처', '메모']
+  const rows = records.map((r) => [
+    r.name,
+    r.location,
+    r.date,
+    r.cost,
+    r.category_label,
+    r.diy ? '직접 수리' : '업체 시공',
+    r.vendor_name || '',
+    r.vendor_phone || '',
+    r.memo || '',
+  ])
+  return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n')
+}
+
+function downloadRecordsAsCSV(records) {
+  if (records.length === 0) {
+    alert('내보낼 내역이 없어요.')
+    return
+  }
+  const csv = buildCSV(records)
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const today = new Date().toISOString().split('T')[0]
+  a.href = url
+  a.download = `집로그_수리내역_${today}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function LoginScreen() {
   const [loading, setLoading] = useState(false)
 
@@ -80,7 +138,11 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
   const totalCostThisYear = records
     .filter((r) => parseInt((r.date || '').match(/^(\d{4})년/)?.[1], 10) === currentYear)
     .reduce((sum, r) => sum + r.cost, 0)
+  const totalCostAllTime = records.reduce((sum, r) => sum + r.cost, 0)
   const diyCount = records.filter((r) => r.diy).length
+
+  const [showYearly, setShowYearly] = useState(false)
+  const yearlyStats = useMemo(() => computeYearlyStats(records), [records])
 
   const [sortOption, setSortOption] = useState('latest')
   const sortedRecords = useMemo(() => {
@@ -90,6 +152,17 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
     else if (sortOption === 'costDesc') arr.sort((a, b) => b.cost - a.cost)
     return arr
   }, [records, sortOption])
+
+  const [pageSize, setPageSize] = useState(5)
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(sortedRecords.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+
+  useEffect(() => {
+    setPage(1)
+  }, [sortOption, pageSize, records.length])
+
+  const pagedRecords = sortedRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
     <div className="app">
@@ -119,6 +192,37 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
             <div className="stat-value">{diyCount}건</div>
           </div>
         </div>
+
+        <div className="action-row">
+          <button className="action-btn" onClick={() => setShowYearly(!showYearly)}>
+            📊 연도별 통계 {showYearly ? '숨기기' : '보기'}
+          </button>
+          <button className="action-btn" onClick={() => downloadRecordsAsCSV(sortedRecords)}>
+            ⬇ CSV 내보내기
+          </button>
+        </div>
+
+        {showYearly && (
+          <div className="yearly-panel">
+            <div className="yearly-total">
+              <span className="yearly-total-label">총 누적 비용</span>
+              <span className="yearly-total-value">{formatCost(totalCostAllTime)}</span>
+            </div>
+            {yearlyStats.length === 0 ? (
+              <div className="empty-hint" style={{ padding: '10px 0' }}>연도별로 표시할 내역이 없어요.</div>
+            ) : (
+              <div className="yearly-table">
+                {yearlyStats.map((stat) => (
+                  <div className="yearly-row" key={stat.year}>
+                    <span className="yearly-year">{stat.year}년</span>
+                    <span className="yearly-count">{stat.count}건</span>
+                    <span className="yearly-cost">{formatCost(stat.cost)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="section-label-row">
@@ -139,7 +243,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
         <div className="empty-hint">아직 등록된 내역이 없어요. 첫 내역을 추가해보세요!</div>
       )}
 
-      {sortedRecords.map((record) => (
+      {pagedRecords.map((record) => (
         <div className="record-card" key={record.id} onClick={() => onSelect(record.id)}>
           <div className="record-top">
             <div className="record-left">
@@ -170,6 +274,20 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
           </div>
         </div>
       ))}
+
+      {sortedRecords.length > 0 && (
+        <div className="pagination-row">
+          <div className="page-size-toggle">
+            <button className={pageSize === 5 ? 'active' : ''} onClick={() => setPageSize(5)}>5개씩</button>
+            <button className={pageSize === 10 ? 'active' : ''} onClick={() => setPageSize(10)}>10개씩</button>
+          </div>
+          <div className="page-nav">
+            <button className="page-nav-btn" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>‹ 이전</button>
+            <span className="page-info">{currentPage} / {totalPages}</span>
+            <button className="page-nav-btn" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages}>다음 ›</button>
+          </div>
+        </div>
+      )}
 
       <div className="fab" onClick={onAddClick}>+ 새 수리 내역 추가하기</div>
     </div>
