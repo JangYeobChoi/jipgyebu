@@ -37,9 +37,21 @@ function formatCost(num) {
 }
 
 function parseDateValue(dateStr) {
-  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월/)
+  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월\s*(?:(\d{1,2})일)?/)
   if (!match) return 0
-  return parseInt(match[1], 10) * 12 + parseInt(match[2], 10)
+  const year = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10)
+  const day = match[3] ? parseInt(match[3], 10) : 0
+  return year * 372 + month * 31 + day
+}
+
+function koreanDateToISO(dateStr) {
+  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월\s*(?:(\d{1,2})일)?/)
+  if (!match) return new Date().toISOString().split('T')[0]
+  const year = match[1]
+  const month = String(match[2]).padStart(2, '0')
+  const day = String(match[3] || '1').padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getYearFromDate(dateStr) {
@@ -88,7 +100,7 @@ function downloadRecordsAsCSV(records) {
     return
   }
   const csv = buildCSV(records)
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   const today = new Date().toISOString().split('T')[0]
@@ -384,7 +396,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   const [space, setSpace] = useState(editingRecord?.location || '')
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(editingRecord ? koreanDateToISO(editingRecord.date) : new Date().toISOString().split('T')[0])
   const [cost, setCost] = useState(editingRecord?.cost ? String(editingRecord.cost) : '')
   const [category, setCategory] = useState(editingRecord?.category || '')
   const [diy, setDiy] = useState(editingRecord ? editingRecord.diy : true)
@@ -398,7 +410,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
     if (!space) { alert('공간을 선택해주세요'); return }
     setSaving(true)
     const dateObj = new Date(date)
-    const dateLabel = `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월`
+    const dateLabel = `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`
     const catInfo = categories.find((c) => c.value === category) || categories[0]
     const { data: { user } } = await supabase.auth.getUser()
     const recordData = {
