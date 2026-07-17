@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from './supabaseClient'
+import { uploadRepairPhotos, deleteRepairPhotos, getSignedPhotoUrls, MAX_PHOTOS_PER_RECORD } from './photoStorage'
 import './App.css'
 
 const categoryColors = {
@@ -73,7 +75,9 @@ function computeYearlyStats(records) {
 }
 
 function csvEscape(value) {
-  const str = String(value ?? '')
+  let str = String(value ?? '')
+  // 스프레드시트에서 값이 수식으로 해석되지 않도록(CSV 수식 인젝션 방지) 앞에 =,+,-,@ 가 오면 접두어를 붙임
+  if (/^[=+\-@]/.test(str)) str = "'" + str
   if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"'
   return str
 }
@@ -100,7 +104,7 @@ function downloadRecordsAsCSV(records) {
     return
   }
   const csv = buildCSV(records)
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   const today = new Date().toISOString().split('T')[0]
@@ -144,7 +148,7 @@ function LoginScreen() {
   )
 }
 
-function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) {
+function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading, fetchError, onRetry }) {
   const totalCount = records.length
   const currentYear = new Date().getFullYear()
   const totalCostThisYear = records
@@ -249,9 +253,16 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
         </div>
       </div>
 
+      {fetchError && (
+        <div className="error-banner">
+          <span>{fetchError}</span>
+          <button className="error-retry-btn" onClick={onRetry}>다시 시도</button>
+        </div>
+      )}
+
       {loading && <div className="empty-hint">불러오는 중...</div>}
 
-      {!loading && records.length === 0 && (
+      {!loading && !fetchError && records.length === 0 && (
         <div className="empty-hint">아직 등록된 내역이 없어요. 첫 내역을 추가해보세요!</div>
       )}
 
@@ -271,6 +282,9 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
           </div>
           <div className="record-bottom">
             <span className="tag tag-location">📍 {record.location}</span>
+            {record.photo_paths && record.photo_paths.length > 0 && (
+              <span className="tag tag-photo">📷 {record.photo_paths.length}</span>
+            )}
           </div>
           <div className="lifecycle-bar-wrap">
             <div className="lifecycle-label">
@@ -307,11 +321,23 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading }) 
 }
 
 function DetailScreen({ record, onBack, onDelete, onEdit }) {
+  const [photoUrls, setPhotoUrls] = useState([])
+
+  useEffect(() => {
+    let active = true
+    if (record.photo_paths && record.photo_paths.length > 0) {
+      getSignedPhotoUrls(record.photo_paths).then((urls) => { if (active) setPhotoUrls(urls) })
+    } else {
+      setPhotoUrls([])
+    }
+    return () => { active = false }
+  }, [record.id, record.photo_paths])
+
   return (
     <div className="app">
       <div className="detail-header">
         <div className="detail-header-left">
-          <div className="back-btn" onClick={onBack}>←</div>
+          <div className="back-btn" onClick={onBack} aria-label="뒤로가기">←</div>
           <span className="header-title">수리 상세</span>
         </div>
         <div className="edit-btn" onClick={onEdit}>수정</div>
@@ -362,6 +388,19 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
         <div className="info-row"><span className="info-key">🧾 비용</span><span className="info-val">{formatCost(record.cost)}</span></div>
       </div>
 
+      {photoUrls.length > 0 && (
+        <div className="section">
+          <div className="section-title">사진</div>
+          <div className="photo-scroll">
+            {photoUrls.map((p) => (
+              <a href={p.url} target="_blank" rel="noreferrer" key={p.path} className="photo-scroll-item">
+                <img src={p.url} alt="수리 내역 사진" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!record.diy && record.vendor_name && (
         <div className="section">
           <div className="section-title">시공 업체</div>
@@ -373,7 +412,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
                 <div className="contact-num">{record.vendor_phone}</div>
               </div>
             </div>
-            <div className="call-btn" onClick={() => alert(`${record.vendor_phone} 로 전화 연결`)}>📞</div>
+            <a className="call-btn" href={`tel:${record.vendor_phone}`} aria-label="업체에 전화하기">📞</a>
           </div>
         </div>
       )}
@@ -405,14 +444,83 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   const [memo, setMemo] = useState(editingRecord?.memo === '메모 없음' ? '' : (editingRecord?.memo || ''))
   const [saving, setSaving] = useState(false)
 
+  // 기존 사진(수정 시) / 새로 추가한 사진 / 삭제 예정 사진 관리
+  const [existingPhotos, setExistingPhotos] = useState([]) // [{ path, url }]
+  const [removedPaths, setRemovedPaths] = useState([])
+  const [newPhotoFiles, setNewPhotoFiles] = useState([])
+  const [newPhotoPreviews, setNewPhotoPreviews] = useState([])
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    if (editingRecord?.photo_paths && editingRecord.photo_paths.length > 0) {
+      getSignedPhotoUrls(editingRecord.photo_paths).then((urls) => { if (active) setExistingPhotos(urls) })
+    }
+    return () => { active = false }
+  }, [editingRecord])
+
+  useEffect(() => {
+    const urls = newPhotoFiles.map((file) => URL.createObjectURL(file))
+    setNewPhotoPreviews(urls)
+    return () => { urls.forEach((url) => URL.revokeObjectURL(url)) }
+  }, [newPhotoFiles])
+
+  const totalPhotoCount = existingPhotos.length + newPhotoFiles.length
+
+  function handleFileSelect(e) {
+    const files = Array.from(e.target.files || [])
+    const remaining = MAX_PHOTOS_PER_RECORD - totalPhotoCount
+    if (remaining <= 0) {
+      alert(`사진은 최대 ${MAX_PHOTOS_PER_RECORD}장까지 추가할 수 있어요.`)
+      e.target.value = ''
+      return
+    }
+    const toAdd = files.slice(0, remaining)
+    if (files.length > toAdd.length) {
+      alert(`최대 ${MAX_PHOTOS_PER_RECORD}장까지만 추가되어 일부 사진은 제외됐어요.`)
+    }
+    setNewPhotoFiles((prev) => [...prev, ...toAdd])
+    e.target.value = ''
+  }
+
+  function removeExistingPhoto(path) {
+    setExistingPhotos((prev) => prev.filter((p) => p.path !== path))
+    setRemovedPaths((prev) => [...prev, path])
+  }
+
+  function removeNewPhoto(index) {
+    setNewPhotoFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function handleSubmit() {
     if (!name.trim()) { alert('항목명을 입력해주세요'); return }
     if (!space) { alert('공간을 선택해주세요'); return }
+    if (Number(cost) < 0) { alert('비용은 0원 이상으로 입력해주세요'); return }
+    if (!diy && vendorPhone && !/^[0-9-]{7,15}$/.test(vendorPhone.trim())) {
+      alert('업체 연락처 형식을 확인해주세요 (숫자와 - 만 입력)')
+      return
+    }
     setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    let uploadedPaths = []
+    if (newPhotoFiles.length > 0) {
+      setUploadingPhotos(true)
+      try {
+        uploadedPaths = await uploadRepairPhotos(newPhotoFiles, user.id)
+      } catch (error) {
+        setUploadingPhotos(false)
+        setSaving(false)
+        alert('사진 업로드 중 오류가 발생했어요: ' + error.message)
+        return
+      }
+      setUploadingPhotos(false)
+    }
+
     const dateObj = new Date(date)
     const dateLabel = `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`
     const catInfo = categories.find((c) => c.value === category) || categories[0]
-    const { data: { user } } = await supabase.auth.getUser()
+    const finalPhotoPaths = [...existingPhotos.map((p) => p.path), ...uploadedPaths]
     const recordData = {
       name: name.trim(),
       icon: categoryIcons[catInfo.value] || '🛠️',
@@ -420,17 +528,19 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
       category_label: catInfo.label,
       date: dateLabel,
       location: space,
-      cost: Number(cost) || 0,
+      cost: Math.max(0, Number(cost) || 0),
       diy,
       vendor_name: diy ? null : vendorName,
       vendor_phone: diy ? null : vendorPhone,
       memo: memo.trim() || '메모 없음',
       user_id: user.id,
+      photo_paths: finalPhotoPaths,
     }
     if (isEditing) {
       const { data, error } = await supabase.from('repairs').update(recordData).eq('id', editingRecord.id).select()
       setSaving(false)
       if (error) { alert('수정 중 오류: ' + error.message); return }
+      if (removedPaths.length > 0) deleteRepairPhotos(removedPaths)
       onSave(data[0])
     } else {
       const { data, error } = await supabase.from('repairs').insert({ ...recordData, lifecycle_percent: 0, lifecycle_label: '등록 직후', lifecycle_status: 'good' }).select()
@@ -444,7 +554,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
     <div className="app">
       <div className="detail-header">
         <div className="detail-header-left">
-          <div className="back-btn" onClick={onBack}>←</div>
+          <div className="back-btn" onClick={onBack} aria-label="뒤로가기">←</div>
           <span className="header-title">{isEditing ? '내역 수정' : '새 수리 내역'}</span>
         </div>
       </div>
@@ -460,7 +570,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
               <div key={s.id} className={`space-btn ${space === s.name ? 'active' : ''}`} onClick={() => setSpace(s.name)}>
                 {s.name}
                 {!s.is_default && (
-                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }}>✕</span>
+                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }} aria-label={`${s.name} 삭제`}>✕</span>
                 )}
               </div>
             ))}
@@ -494,7 +604,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
           <div className="field-label">비용</div>
           <div className="cost-row">
             <span className="cost-prefix">₩</span>
-            <input type="number" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} />
+            <input type="number" min="0" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} />
           </div>
         </div>
         <div className="field">
@@ -520,6 +630,30 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
           </div>
         )}
         <div className="field">
+          <div className="field-label">사진 (최대 {MAX_PHOTOS_PER_RECORD}장)</div>
+          <div className="photo-grid">
+            {existingPhotos.map((p) => (
+              <div className="photo-thumb" key={p.path}>
+                <img src={p.url} alt="첨부 사진" />
+                <span className="photo-remove" onClick={() => removeExistingPhoto(p.path)} aria-label="사진 삭제">✕</span>
+              </div>
+            ))}
+            {newPhotoFiles.map((file, i) => (
+              <div className="photo-thumb" key={`new-${i}`}>
+                <img src={newPhotoPreviews[i]} alt="첨부 사진" />
+                <span className="photo-remove" onClick={() => removeNewPhoto(i)} aria-label="사진 삭제">✕</span>
+              </div>
+            ))}
+            {totalPhotoCount < MAX_PHOTOS_PER_RECORD && (
+              <label className="photo-add">
+                + 추가
+                <input type="file" accept="image/*" multiple onChange={handleFileSelect} style={{ display: 'none' }} />
+              </label>
+            )}
+          </div>
+          {uploadingPhotos && <div className="photo-uploading-hint">사진 업로드 중...</div>}
+        </div>
+        <div className="field">
           <div className="field-label">메모</div>
           <textarea placeholder="추가로 기억해두고 싶은 내용을 적어요" value={memo} onChange={(e) => setMemo(e.target.value)}></textarea>
         </div>
@@ -531,14 +665,74 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   )
 }
 
+function ListRoute({ records, user, loading, fetchError, onRetry, onLogout }) {
+  const navigate = useNavigate()
+  return (
+    <ListScreen
+      records={records}
+      onSelect={(id) => navigate(`/records/${id}`)}
+      onAddClick={() => navigate('/records/new')}
+      onLogout={onLogout}
+      user={user}
+      loading={loading}
+      fetchError={fetchError}
+      onRetry={onRetry}
+    />
+  )
+}
+
+function DetailRoute({ records, onDelete }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const record = records.find((r) => String(r.id) === id)
+
+  if (!record) {
+    return (
+      <div className="app">
+        <div className="empty-hint" style={{ paddingTop: '40px' }}>
+          내역을 찾을 수 없어요.
+          <div className="fab" onClick={() => navigate('/')}>목록으로 돌아가기</div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <DetailScreen
+      record={record}
+      onBack={() => navigate('/')}
+      onDelete={async () => {
+        const deleted = await onDelete(record.id)
+        if (deleted) navigate('/')
+      }}
+      onEdit={() => navigate(`/records/${record.id}/edit`)}
+    />
+  )
+}
+
+function AddRoute({ records, spaces, onSave, onSpaceAdd, onSpaceDelete }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const editingRecord = id ? records.find((r) => String(r.id) === id) : null
+
+  return (
+    <AddScreen
+      onBack={() => navigate(editingRecord ? `/records/${editingRecord.id}` : '/')}
+      onSave={(saved) => { onSave(saved); navigate('/') }}
+      editingRecord={editingRecord}
+      spaces={spaces}
+      onSpaceAdd={onSpaceAdd}
+      onSpaceDelete={onSpaceDelete}
+    />
+  )
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
-  const [screen, setScreen] = useState('list')
-  const [selectedId, setSelectedId] = useState(null)
-  const [editingRecord, setEditingRecord] = useState(null)
+  const [fetchError, setFetchError] = useState(null)
   const [spaces, setSpaces] = useState([])
 
   useEffect(() => {
@@ -561,9 +755,10 @@ function App() {
 
   async function fetchRecords() {
     setLoading(true)
+    setFetchError(null)
     const { data: { user } } = await supabase.auth.getUser()
     const { data, error } = await supabase.from('repairs').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-    if (error) { console.error(error) } else { setRecords(data) }
+    if (error) { console.error(error); setFetchError('수리 내역을 불러오지 못했어요. 네트워크 상태를 확인해주세요.') } else { setRecords(data) }
     setLoading(false)
   }
 
@@ -573,75 +768,76 @@ function App() {
   }
 
   async function handleLogout() {
+    const confirmed = confirm('로그아웃 하시겠어요?')
+    if (!confirmed) return
     await supabase.auth.signOut()
     setRecords([])
-    setScreen('list')
   }
 
-  const selectedRecord = records.find((r) => r.id === selectedId)
-
-  function handleSelect(id) { setSelectedId(id); setScreen('detail') }
-
   function handleSave(savedRecord) {
-    const exists = records.some((r) => r.id === savedRecord.id)
-    if (exists) { setRecords(records.map((r) => r.id === savedRecord.id ? savedRecord : r)) }
-    else { setRecords([savedRecord, ...records]) }
-    setEditingRecord(null)
-    setScreen('list')
+    setRecords((prev) => {
+      const exists = prev.some((r) => r.id === savedRecord.id)
+      if (exists) return prev.map((r) => (r.id === savedRecord.id ? savedRecord : r))
+      return [savedRecord, ...prev]
+    })
   }
 
   async function handleDelete(id) {
     const confirmed = confirm('정말 삭제하시겠어요?')
-    if (!confirmed) return
+    if (!confirmed) return false
+    const target = records.find((r) => r.id === id)
     const { error } = await supabase.from('repairs').delete().eq('id', id)
-    if (error) { alert('삭제 중 오류: ' + error.message); return }
-    setRecords(records.filter((r) => r.id !== id))
-    setScreen('list')
+    if (error) { alert('삭제 중 오류: ' + error.message); return false }
+    if (target?.photo_paths?.length) deleteRepairPhotos(target.photo_paths)
+    setRecords((prev) => prev.filter((r) => r.id !== id))
+    return true
+  }
+
+  async function handleSpaceAdd(name) {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('spaces').insert({ name, is_default: false, user_id: user.id }).select()
+    if (!error) setSpaces((prev) => [...prev, data[0]])
+  }
+
+  async function handleSpaceDelete(id) {
+    const { error } = await supabase.from('spaces').delete().eq('id', id)
+    if (!error) setSpaces((prev) => prev.filter((s) => s.id !== id))
   }
 
   if (authLoading) return <div className="app"><div className="empty-hint" style={{paddingTop:'40px'}}>로딩 중...</div></div>
   if (!user) return <LoginScreen />
 
-  if (screen === 'detail' && selectedRecord) {
-    return (
-      <DetailScreen
-        record={selectedRecord}
-        onBack={() => setScreen('list')}
-        onDelete={() => handleDelete(selectedRecord.id)}
-        onEdit={() => { setEditingRecord(selectedRecord); setScreen('add') }}
-      />
-    )
-  }
-
-  if (screen === 'add') {
-    return (
-      <AddScreen
-        onBack={() => { setEditingRecord(null); setScreen(editingRecord ? 'detail' : 'list') }}
-        onSave={handleSave}
-        editingRecord={editingRecord}
-        spaces={spaces}
-        onSpaceAdd={async (name) => {
-          const { data: { user } } = await supabase.auth.getUser()
-          const { data, error } = await supabase.from('spaces').insert({ name, is_default: false, user_id: user.id }).select()
-          if (!error) setSpaces([...spaces, data[0]])
-        }}
-        onSpaceDelete={async (id) => {
-          const { error } = await supabase.from('spaces').delete().eq('id', id)
-          if (!error) setSpaces(spaces.filter((s) => s.id !== id))
-        }}
-      />
-    )
-  }
-
   return (
-    <ListScreen
-      records={records}
-      onSelect={handleSelect}
-      onAddClick={() => setScreen('add')}
-      onLogout={handleLogout}
-      user={user}
-      loading={loading}
-    />
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <ListRoute
+              records={records}
+              user={user}
+              loading={loading}
+              fetchError={fetchError}
+              onRetry={() => { fetchRecords(); fetchSpaces() }}
+              onLogout={handleLogout}
+            />
+          }
+        />
+        <Route
+          path="/records/new"
+          element={<AddRoute records={records} spaces={spaces} onSave={handleSave} onSpaceAdd={handleSpaceAdd} onSpaceDelete={handleSpaceDelete} />}
+        />
+        <Route
+          path="/records/:id"
+          element={<DetailRoute records={records} onDelete={handleDelete} />}
+        />
+        <Route
+          path="/records/:id/edit"
+          element={<AddRoute records={records} spaces={spaces} onSave={handleSave} onSpaceAdd={handleSpaceAdd} onSpaceDelete={handleSpaceDelete} />}
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

@@ -252,6 +252,53 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 
 .tag { font-size: 11px; padding: 3px 9px; border-radius: 20px; }
 .tag-location { background: var(--paper); color: var(--ink-soft); border: 1px solid var(--line); }
+.tag-photo { background: var(--paper); color: var(--ink-soft); border: 1px solid var(--line); }
+
+.error-banner {
+  margin: 10px 16px 0;
+  background: var(--stamp-soft);
+  border: 1px solid var(--stamp-line);
+  color: var(--stamp);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.error-retry-btn {
+  background: transparent;
+  border: 1px solid var(--stamp);
+  color: var(--stamp);
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-body);
+}
+.error-retry-btn:hover { background: var(--stamp); color: var(--card); }
+
+.photo-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.photo-scroll-item {
+  flex-shrink: 0;
+  width: 96px;
+  height: 96px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  display: block;
+}
+.photo-scroll-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 
 .lifecycle-bar-wrap { margin-top: 10px; }
 .lifecycle-label { font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; display: flex; justify-content: space-between; }
@@ -409,7 +456,7 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 .call-btn {
   width: 38px; height: 38px; border-radius: 50%; background: var(--stamp-soft);
   border: 1px solid var(--stamp-line); display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 15px;
+  cursor: pointer; font-size: 15px; text-decoration: none;
 }
 
 .memo-box { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; font-size: 14px; color: var(--ink); line-height: 1.7; }
@@ -428,6 +475,51 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 .field textarea { resize: none; height: 72px; line-height: 1.5; }
 
 .space-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.photo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.photo-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.photo-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(38, 43, 56, 0.75);
+  color: var(--card);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.photo-add {
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  border: 1px dashed var(--line-strong);
+  background: var(--card);
+  color: var(--ink-soft);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-align: center;
+}
+.photo-add:hover { border-color: var(--ink); color: var(--ink); }
+
+.photo-uploading-hint { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+
 .space-btn {
   padding: 9px 4px; border-radius: 6px; border: 1px solid var(--line-strong);
   background: var(--card); font-size: 13px; color: var(--ink-soft); cursor: pointer; text-align: center;
