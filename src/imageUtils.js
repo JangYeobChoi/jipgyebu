@@ -7,24 +7,12 @@ function isHeic(file) {
   return type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif')
 }
 
-// 아이폰/맥 카메라의 기본 저장 형식인 HEIC는 Chrome 등 대부분의 브라우저가 직접 디코딩하지 못함
-// 필요할 때만 변환 라이브러리를 불러와(코드 스플리팅) JPEG로 먼저 바꿔줌
-async function toDecodableBlob(file) {
-  if (!isHeic(file)) return file
-  try {
-    const heic2any = (await import('heic2any')).default
-    const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
-    return Array.isArray(converted) ? converted[0] : converted
-  } catch {
-    throw new Error('HEIC 사진을 변환하지 못했어요. 아이폰 설정에서 "호환성 우선(JPG)"으로 촬영하거나, 사진 앱에서 JPG로 내보낸 뒤 다시 시도해주세요.')
-  }
-}
-
+// HEIC/HEIF는 브라우저가 자체적으로 디코딩할 수 있는 경우에만 지원됨(예: 아이폰 사파리, 최신 안드로이드 브라우저).
+// 별도 변환 라이브러리는 CSP의 script-src에 unsafe-eval을 허용해야만 동작해서 보안을 낮추게 되므로 사용하지 않음.
+// 디코딩에 실패하면 사용자에게 변환 또는 다른 기기 사용을 안내함.
 export async function compressImage(file, { maxDimension = 1200, quality = 0.7 } = {}) {
-  const decodable = await toDecodableBlob(file)
-
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(decodable)
+    const objectUrl = URL.createObjectURL(file)
     const img = new Image()
 
     img.onload = () => {
@@ -56,7 +44,11 @@ export async function compressImage(file, { maxDimension = 1200, quality = 0.7 }
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl)
-      reject(new Error('이미지를 불러오는 중 오류가 발생했어요. 다른 사진 형식(JPG, PNG)으로 다시 시도해주세요.'))
+      if (isHeic(file)) {
+        reject(new Error('이 브라우저는 HEIC 사진을 지원하지 않아요. 아이폰/안드로이드 앱에서 올리거나, 사진 앱에서 JPG로 변환한 뒤 다시 시도해주세요.'))
+      } else {
+        reject(new Error('이미지를 불러오는 중 오류가 발생했어요. 다른 사진 형식(JPG, PNG)으로 다시 시도해주세요.'))
+      }
     }
 
     img.src = objectUrl
