@@ -150,6 +150,15 @@ const dict = {
     'csv.headerVendorPhone': '업체연락처',
     'csv.headerMemo': '메모',
     'csv.filenamePrefix': '집로그_수리내역_',
+
+    'space.livingRoom': '거실',
+    'space.kitchen': '주방',
+    'space.bedroom': '침실',
+    'space.bathroom': '화장실',
+    'space.balcony': '베란다',
+    'space.entrance': '현관',
+    'space.utilityRoom': '다용도실',
+    'space.all': '전체',
   },
   en: {
     'app.name': '집로그',
@@ -290,6 +299,15 @@ const dict = {
     'csv.headerVendorPhone': 'Vendor Phone',
     'csv.headerMemo': 'Notes',
     'csv.filenamePrefix': 'Jiplog_Repairs_',
+
+    'space.livingRoom': 'Living Room',
+    'space.kitchen': 'Kitchen',
+    'space.bedroom': 'Bedroom',
+    'space.bathroom': 'Bathroom',
+    'space.balcony': 'Balcony',
+    'space.entrance': 'Entrance',
+    'space.utilityRoom': 'Utility Room',
+    'space.all': 'Whole House',
   },
   es: {
     'app.name': '집로그',
@@ -430,7 +448,29 @@ const dict = {
     'csv.headerVendorPhone': 'Teléfono del proveedor',
     'csv.headerMemo': 'Notas',
     'csv.filenamePrefix': 'Jiplog_Reparaciones_',
+
+    'space.livingRoom': 'Sala de estar',
+    'space.kitchen': 'Cocina',
+    'space.bedroom': 'Dormitorio',
+    'space.bathroom': 'Baño',
+    'space.balcony': 'Balcón',
+    'space.entrance': 'Entrada',
+    'space.utilityRoom': 'Cuarto de servicio',
+    'space.all': 'Toda la casa',
   },
+}
+
+// 앱이 자동으로 만들어주는 기본 공간(거실/주방/침실/화장실/베란다/현관/다용도실/전체)만
+// 번역 대상이며, 사용자가 "+ 추가"로 직접 만든 공간 이름은 그대로 둔다.
+const DEFAULT_SPACE_KEYS = {
+  '거실': 'space.livingRoom',
+  '주방': 'space.kitchen',
+  '침실': 'space.bedroom',
+  '화장실': 'space.bathroom',
+  '베란다': 'space.balcony',
+  '현관': 'space.entrance',
+  '다용도실': 'space.utilityRoom',
+  '전체': 'space.all',
 }
 
 function interpolate(str, vars) {
@@ -463,6 +503,12 @@ export function dateSortValue(dateStr) {
 export function getYearFromDate(dateStr) {
   const d = parseAnyDate(dateStr)
   return d ? d.year : null
+}
+
+// 기본 공간 이름이면 현재 언어로 번역해서 반환하고, 사용자가 직접 지은 이름이면 그대로 반환한다.
+export function translateSpaceName(name, t) {
+  const key = DEFAULT_SPACE_KEYS[name]
+  return key ? t(key) : name
 }
 
 // 저장된 언어 선택이 없을 때, 브라우저(=기기)의 언어 설정을 확인해서 한/영/스 중

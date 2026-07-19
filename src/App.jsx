@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import { uploadRepairPhotos, deleteRepairPhotos, getSignedPhotoUrls, MAX_PHOTOS_PER_RECORD } from './photoStorage'
-import { LanguageProvider, useLanguage, LANGUAGES, dateSortValue, getYearFromDate, dateToInputValue } from './i18n.jsx'
+import { LanguageProvider, useLanguage, LANGUAGES, dateSortValue, getYearFromDate, dateToInputValue, translateSpaceName } from './i18n.jsx'
 import './App.css'
 
 const categoryColors = {
@@ -60,7 +60,7 @@ function buildCSV(records, i18n) {
   ]
   const rows = records.map((r) => [
     r.name,
-    r.location,
+    translateSpaceName(r.location, t),
     formatDate(r.date),
     r.cost,
     t('category.' + r.category),
@@ -276,7 +276,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
             <div className="record-cost">{formatCost(record.cost)}</div>
           </div>
           <div className="record-bottom">
-            <span className="tag tag-location">📍 {record.location}</span>
+            <span className="tag tag-location">📍 {translateSpaceName(record.location, t)}</span>
             {record.photo_paths && record.photo_paths.length > 0 && (
               <span className="tag tag-photo">📷 {record.photo_paths.length}</span>
             )}
@@ -347,7 +347,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
           <div className="hero-icon" style={{ background: categoryColors[record.category], color: categoryRing[record.category] }}>{record.icon}</div>
           <div>
             <div className="hero-name">{record.name}</div>
-            <div className="hero-sub">{record.location} · {formatDate(record.date)}</div>
+            <div className="hero-sub">{translateSpaceName(record.location, t)} · {formatDate(record.date)}</div>
           </div>
         </div>
         <div className="badge-row">
@@ -380,7 +380,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
 
       <div className="section">
         <div className="section-title">{t('detail.info')}</div>
-        <div className="info-row"><span className="info-key">{t('detail.space')}</span><span className="info-val">{record.location}</span></div>
+        <div className="info-row"><span className="info-key">{t('detail.space')}</span><span className="info-val">{translateSpaceName(record.location, t)}</span></div>
         <div className="info-row"><span className="info-key">{t('detail.date')}</span><span className="info-val">{formatDate(record.date)}</span></div>
         <div className="info-row"><span className="info-key">{t('detail.cost')}</span><span className="info-val">{formatCost(record.cost)}</span></div>
       </div>
@@ -566,9 +566,9 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
           <div className="space-grid">
             {spaces.map((s) => (
               <div key={s.id} className={`space-btn ${space === s.name ? 'active' : ''}`} onClick={() => setSpace(s.name)}>
-                {s.name}
+                {translateSpaceName(s.name, t)}
                 {!s.is_default && (
-                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }} aria-label={t('add.spaceDeleteAria', { name: s.name })}>✕</span>
+                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }} aria-label={t('add.spaceDeleteAria', { name: translateSpaceName(s.name, t) })}>✕</span>
                 )}
               </div>
             ))}
