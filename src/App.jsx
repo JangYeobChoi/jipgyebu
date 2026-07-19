@@ -143,6 +143,7 @@ function LoginScreen() {
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" />
           {loading ? '로그인 중...' : 'Google로 시작하기'}
         </button>
+        <p className="login-hint">Google 계정만 있으면 별도 가입 없이 바로 이용할 수 있어요</p>
       </div>
     </div>
   )
