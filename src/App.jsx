@@ -148,7 +148,7 @@ function LoginScreen() {
   )
 }
 
-function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading, fetchError, onRetry }) {
+function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user, loading, fetchError, onRetry }) {
   const totalCount = records.length
   const currentYear = new Date().getFullYear()
   const totalCostThisYear = records
@@ -193,7 +193,10 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, user, loading, fe
             <button className="logout-btn" onClick={onLogout}>로그아웃</button>
           </div>
         </div>
-        <div className="user-info">안녕하세요, {user?.email?.split('@')[0]}님 👋</div>
+        <div className="user-info">
+          안녕하세요, {user?.email?.split('@')[0]}님 👋
+          <span className="withdraw-link" onClick={onWithdraw}>회원 탈퇴</span>
+        </div>
         <div className="stats-row">
           <div className="stat-card">
             <div className="stat-label">총 수리 건수</div>
@@ -665,7 +668,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   )
 }
 
-function ListRoute({ records, user, loading, fetchError, onRetry, onLogout }) {
+function ListRoute({ records, user, loading, fetchError, onRetry, onLogout, onWithdraw }) {
   const navigate = useNavigate()
   return (
     <ListScreen
@@ -673,6 +676,7 @@ function ListRoute({ records, user, loading, fetchError, onRetry, onLogout }) {
       onSelect={(id) => navigate(`/records/${id}`)}
       onAddClick={() => navigate('/records/new')}
       onLogout={onLogout}
+      onWithdraw={onWithdraw}
       user={user}
       loading={loading}
       fetchError={fetchError}
@@ -774,6 +778,33 @@ function App() {
     setRecords([])
   }
 
+  async function handleWithdraw() {
+    const confirmed = confirm(
+      '정말 탈퇴하시겠어요?\n\n등록된 모든 수리 내역, 사진, 공간 정보가 영구적으로 삭제되며 복구할 수 없습니다.'
+    )
+    if (!confirmed) return
+
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (!currentUser) return
+
+    const allPhotoPaths = records.flatMap((r) => r.photo_paths || [])
+    if (allPhotoPaths.length > 0) await deleteRepairPhotos(allPhotoPaths)
+
+    const { error: repairsError } = await supabase.from('repairs').delete().eq('user_id', currentUser.id)
+    if (repairsError) {
+      alert('탈퇴 처리 중 오류가 발생했어요: ' + repairsError.message)
+      return
+    }
+
+    const { error: spacesError } = await supabase.from('spaces').delete().eq('user_id', currentUser.id)
+    if (spacesError) console.error('공간 삭제 중 오류:', spacesError.message)
+
+    await supabase.auth.signOut()
+    setRecords([])
+    setSpaces([])
+    alert('탈퇴가 완료됐어요. 모든 데이터가 삭제되었습니다.')
+  }
+
   function handleSave(savedRecord) {
     setRecords((prev) => {
       const exists = prev.some((r) => r.id === savedRecord.id)
@@ -820,6 +851,7 @@ function App() {
               fetchError={fetchError}
               onRetry={() => { fetchRecords(); fetchSpaces() }}
               onLogout={handleLogout}
+              onWithdraw={handleWithdraw}
             />
           }
         />

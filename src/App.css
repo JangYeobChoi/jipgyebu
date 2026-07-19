@@ -610,4 +610,13 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 
 .user-info { font-size: 13px; color: var(--ink-soft); margin-top: 8px; margin-bottom: 2px; }
 
+.withdraw-link {
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: 10px;
+}
+.withdraw-link:hover { color: var(--stamp); }
+
 .beta-banner { background: #EFE2C0; border-bottom: 1px solid #D8BE84; color: #6B4A12; font-size: 12px; padding: 8px 16px; text-align: center; letter-spacing: 0.01em; }
