@@ -465,16 +465,32 @@ export function getYearFromDate(dateStr) {
   return d ? d.year : null
 }
 
+// 저장된 언어 선택이 없을 때, 브라우저(=기기)의 언어 설정을 확인해서 한/영/스 중
+// 일치하는 게 있으면 그 언어로, 없으면 영어를 기본값으로 사용한다.
+function detectBrowserLang() {
+  try {
+    const candidates = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]
+    for (const l of candidates) {
+      const code = (l || '').slice(0, 2).toLowerCase()
+      if (dict[code]) return code
+    }
+  } catch {
+    /* navigator 접근 불가 시 무시 */
+  }
+  return 'en'
+}
+
 const LanguageContext = createContext(null)
 
 export function LanguageProvider({ children }) {
   const [lang, setLangState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      return saved && dict[saved] ? saved : 'ko'
+      if (saved && dict[saved]) return saved
     } catch {
-      return 'ko'
+      /* localStorage 접근 불가 시 무시 */
     }
+    return detectBrowserLang()
   })
 
   const value = useMemo(() => {
