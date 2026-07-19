@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import { uploadRepairPhotos, deleteRepairPhotos, getSignedPhotoUrls, MAX_PHOTOS_PER_RECORD } from './photoStorage'
+import { LanguageProvider, useLanguage, LANGUAGES, dateSortValue, getYearFromDate, dateToInputValue } from './i18n.jsx'
 import './App.css'
 
 const categoryColors = {
@@ -28,38 +29,7 @@ const lifecycleColors = {
   warn: '#B06423',
 }
 
-const categories = [
-  { value: 'replace', label: '교체' },
-  { value: 'repair', label: '수리' },
-  { value: 'install', label: '설치' },
-]
-
-function formatCost(num) {
-  return '₩' + num.toLocaleString('ko-KR')
-}
-
-function parseDateValue(dateStr) {
-  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월\s*(?:(\d{1,2})일)?/)
-  if (!match) return 0
-  const year = parseInt(match[1], 10)
-  const month = parseInt(match[2], 10)
-  const day = match[3] ? parseInt(match[3], 10) : 0
-  return year * 372 + month * 31 + day
-}
-
-function koreanDateToISO(dateStr) {
-  const match = (dateStr || '').match(/^(\d{4})년\s*(\d{1,2})월\s*(?:(\d{1,2})일)?/)
-  if (!match) return new Date().toISOString().split('T')[0]
-  const year = match[1]
-  const month = String(match[2]).padStart(2, '0')
-  const day = String(match[3] || '1').padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getYearFromDate(dateStr) {
-  const match = (dateStr || '').match(/^(\d{4})년/)
-  return match ? parseInt(match[1], 10) : null
-}
+const categories = ['replace', 'repair', 'install']
 
 function computeYearlyStats(records) {
   const map = new Map()
@@ -82,15 +52,19 @@ function csvEscape(value) {
   return str
 }
 
-function buildCSV(records) {
-  const headers = ['항목명', '공간', '날짜', '비용', '카테고리', '수리방식', '업체명', '업체연락처', '메모']
+function buildCSV(records, i18n) {
+  const { t, formatDate } = i18n
+  const headers = [
+    t('csv.headerName'), t('csv.headerLocation'), t('csv.headerDate'), t('csv.headerCost'),
+    t('csv.headerCategory'), t('csv.headerMethod'), t('csv.headerVendorName'), t('csv.headerVendorPhone'), t('csv.headerMemo'),
+  ]
   const rows = records.map((r) => [
     r.name,
     r.location,
-    r.date,
+    formatDate(r.date),
     r.cost,
-    r.category_label,
-    r.diy ? '직접 수리' : '업체 시공',
+    t('category.' + r.category),
+    r.diy ? t('common.diy') : t('common.pro'),
     r.vendor_name || '',
     r.vendor_phone || '',
     r.memo || '',
@@ -98,25 +72,39 @@ function buildCSV(records) {
   return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n')
 }
 
-function downloadRecordsAsCSV(records) {
+function downloadRecordsAsCSV(records, i18n) {
   if (records.length === 0) {
-    alert('내보낼 내역이 없어요.')
+    alert(i18n.t('alert.csvEmpty'))
     return
   }
-  const csv = buildCSV(records)
+  const csv = buildCSV(records, i18n)
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   const today = new Date().toISOString().split('T')[0]
   a.href = url
-  a.download = `집로그_수리내역_${today}.csv`
+  a.download = `${i18n.t('csv.filenamePrefix')}${today}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
 
+function LanguageSwitcher({ className }) {
+  const { lang, setLang } = useLanguage()
+  return (
+    <div className={`lang-switcher${className ? ' ' + className : ''}`}>
+      <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language / 언어 / Idioma">
+        {LANGUAGES.map((l) => (
+          <option key={l.code} value={l.code}>{l.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function LoginScreen() {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
 
   async function handleGoogleLogin() {
@@ -128,7 +116,7 @@ function LoginScreen() {
       },
     })
     if (error) {
-      alert('로그인 중 오류가 발생했어요: ' + error.message)
+      alert(t('alert.loginError', { message: error.message }))
       setLoading(false)
     }
   }
@@ -136,24 +124,26 @@ function LoginScreen() {
   return (
     <div className="app">
       <div className="login-screen">
+        <div className="login-lang-row"><LanguageSwitcher /></div>
         <div className="login-logo">🏠</div>
-        <h1 className="login-title">집로그</h1>
-        <p className="login-subtitle">우리 집 수리 내역을 한 곳에서 관리하세요</p>
+        <h1 className="login-title">{t('app.name')}</h1>
+        <p className="login-subtitle">{t('login.subtitle')}</p>
         <button className="google-login-btn" onClick={handleGoogleLogin} disabled={loading}>
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" />
-          {loading ? '로그인 중...' : 'Google로 시작하기'}
+          {loading ? t('login.loading') : t('login.startWithGoogle')}
         </button>
-        <p className="login-hint">Google 계정만 있으면 별도 가입 없이 바로 이용할 수 있어요</p>
+        <p className="login-hint">{t('login.hint')}</p>
       </div>
     </div>
   )
 }
 
 function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user, loading, fetchError, onRetry }) {
+  const { t, formatDate, formatCost } = useLanguage()
   const totalCount = records.length
   const currentYear = new Date().getFullYear()
   const totalCostThisYear = records
-    .filter((r) => parseInt((r.date || '').match(/^(\d{4})년/)?.[1], 10) === currentYear)
+    .filter((r) => getYearFromDate(r.date) === currentYear)
     .reduce((sum, r) => sum + r.cost, 0)
   const totalCostAllTime = records.reduce((sum, r) => sum + r.cost, 0)
   const diyCount = records.filter((r) => r.diy).length
@@ -164,8 +154,8 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
   const [sortOption, setSortOption] = useState('latest')
   const sortedRecords = useMemo(() => {
     const arr = [...records]
-    if (sortOption === 'latest') arr.sort((a, b) => parseDateValue(b.date) - parseDateValue(a.date))
-    else if (sortOption === 'oldest') arr.sort((a, b) => parseDateValue(a.date) - parseDateValue(b.date))
+    if (sortOption === 'latest') arr.sort((a, b) => dateSortValue(b.date) - dateSortValue(a.date))
+    else if (sortOption === 'oldest') arr.sort((a, b) => dateSortValue(a.date) - dateSortValue(b.date))
     else if (sortOption === 'costDesc') arr.sort((a, b) => b.cost - a.cost)
     return arr
   }, [records, sortOption])
@@ -184,58 +174,59 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
   return (
     <div className="app">
       <div className="beta-banner">
-        ⚠️ 현재 베타 버전입니다. 데이터가 예고 없이 삭제될 수 있어요.
+        {t('beta.banner')}
       </div>
       <div className="header">
         <div className="header-top">
-          <span className="app-title">집로그</span>
+          <span className="app-title">{t('app.name')}</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button className="add-btn" onClick={onAddClick}>+ 내역 추가</button>
-            <button className="logout-btn" onClick={onLogout}>로그아웃</button>
+            <button className="add-btn" onClick={onAddClick}>{t('list.addButton')}</button>
+            <LanguageSwitcher />
+            <button className="logout-btn" onClick={onLogout}>{t('list.logout')}</button>
           </div>
         </div>
         <div className="user-info">
-          안녕하세요, {user?.email?.split('@')[0]}님 👋
-          <span className="withdraw-link" onClick={onWithdraw}>회원 탈퇴</span>
+          {t('list.greeting', { name: user?.email?.split('@')[0] })}
+          <span className="withdraw-link" onClick={onWithdraw}>{t('list.withdraw')}</span>
         </div>
         <div className="stats-row">
           <div className="stat-card">
-            <div className="stat-label">총 수리 건수</div>
-            <div className="stat-value">{totalCount}건</div>
+            <div className="stat-label">{t('stats.totalCount')}</div>
+            <div className="stat-value">{t('common.countUnit', { count: totalCount })}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">올해 지출</div>
+            <div className="stat-label">{t('stats.thisYearSpend')}</div>
             <div className="stat-value">{formatCost(totalCostThisYear)}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">직접 수리</div>
-            <div className="stat-value">{diyCount}건</div>
+            <div className="stat-label">{t('stats.diy')}</div>
+            <div className="stat-value">{t('common.countUnit', { count: diyCount })}</div>
           </div>
         </div>
 
         <div className="action-row">
           <button className="action-btn" onClick={() => setShowYearly(!showYearly)}>
-            📊 연도별 통계 {showYearly ? '숨기기' : '보기'}
+            {showYearly ? t('action.yearlyStatsHide') : t('action.yearlyStatsShow')}
           </button>
-          <button className="action-btn" onClick={() => downloadRecordsAsCSV(sortedRecords)}>
-            ⬇ CSV 내보내기
+          <button className="action-btn" onClick={() => downloadRecordsAsCSV(sortedRecords, { t, formatDate })}>
+            {t('action.csvExport')}
           </button>
         </div>
 
         {showYearly && (
           <div className="yearly-panel">
             <div className="yearly-total">
-              <span className="yearly-total-label">총 누적 비용</span>
+              <span className="yearly-total-label">{t('yearly.totalCost')}</span>
               <span className="yearly-total-value">{formatCost(totalCostAllTime)}</span>
             </div>
             {yearlyStats.length === 0 ? (
-              <div className="empty-hint" style={{ padding: '10px 0' }}>연도별로 표시할 내역이 없어요.</div>
+              <div className="empty-hint" style={{ padding: '10px 0' }}>{t('yearly.empty')}</div>
             ) : (
               <div className="yearly-table">
                 {yearlyStats.map((stat) => (
                   <div className="yearly-row" key={stat.year}>
-                    <span className="yearly-year">{stat.year}년</span>
-                    <span className="yearly-count">{stat.count}건</span>
+                    <span className="yearly-year">{stat.year}</span>
+                    <span className="yearly-count">{t('common.countUnit', { count: stat.count })}</span>
                     <span className="yearly-cost">{formatCost(stat.cost)}</span>
                   </div>
                 ))}
@@ -246,13 +237,13 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
       </div>
 
       <div className="section-label-row">
-        <span className="section-label-text">최근 내역</span>
+        <span className="section-label-text">{t('section.recent')}</span>
         <span className="section-label-line"></span>
         <div className="sort-dropdown">
           <select value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
-            <option value="latest">최신순</option>
-            <option value="oldest">오래된순</option>
-            <option value="costDesc">비용 높은순</option>
+            <option value="latest">{t('sort.latest')}</option>
+            <option value="oldest">{t('sort.oldest')}</option>
+            <option value="costDesc">{t('sort.costDesc')}</option>
           </select>
         </div>
       </div>
@@ -260,14 +251,14 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
       {fetchError && (
         <div className="error-banner">
           <span>{fetchError}</span>
-          <button className="error-retry-btn" onClick={onRetry}>다시 시도</button>
+          <button className="error-retry-btn" onClick={onRetry}>{t('error.retry')}</button>
         </div>
       )}
 
-      {loading && <div className="empty-hint">불러오는 중...</div>}
+      {loading && <div className="empty-hint">{t('loading.generic')}</div>}
 
       {!loading && !fetchError && records.length === 0 && (
-        <div className="empty-hint">아직 등록된 내역이 없어요. 첫 내역을 추가해보세요!</div>
+        <div className="empty-hint">{t('empty.noRecords')}</div>
       )}
 
       {pagedRecords.map((record) => (
@@ -279,7 +270,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
               </div>
               <div>
                 <div className="record-name">{record.name}</div>
-                <div className="record-meta">{record.date} · {record.diy ? '직접 수리' : '업체 시공'}</div>
+                <div className="record-meta">{formatDate(record.date)} · {record.diy ? t('common.diy') : t('common.pro')}</div>
               </div>
             </div>
             <div className="record-cost">{formatCost(record.cost)}</div>
@@ -292,8 +283,8 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
           </div>
           <div className="lifecycle-bar-wrap">
             <div className="lifecycle-label">
-              <span>수명주기</span>
-              <span>{record.lifecycle_label}</span>
+              <span>{t('lifecycle.title')}</span>
+              <span>{record.lifecycle_label === 'justRegistered' ? t('lifecycle.justRegistered') : record.lifecycle_label}</span>
             </div>
             <div className="lifecycle-bar">
               <div
@@ -308,23 +299,24 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
       {sortedRecords.length > 0 && (
         <div className="pagination-row">
           <div className="page-size-toggle">
-            <button className={pageSize === 5 ? 'active' : ''} onClick={() => setPageSize(5)}>5개씩</button>
-            <button className={pageSize === 10 ? 'active' : ''} onClick={() => setPageSize(10)}>10개씩</button>
+            <button className={pageSize === 5 ? 'active' : ''} onClick={() => setPageSize(5)}>{t('pagination.size5')}</button>
+            <button className={pageSize === 10 ? 'active' : ''} onClick={() => setPageSize(10)}>{t('pagination.size10')}</button>
           </div>
           <div className="page-nav">
-            <button className="page-nav-btn" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>‹ 이전</button>
-            <span className="page-info">{currentPage} / {totalPages}</span>
-            <button className="page-nav-btn" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages}>다음 ›</button>
+            <button className="page-nav-btn" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>{t('pagination.prev')}</button>
+            <span className="page-info">{t('pagination.info', { current: currentPage, total: totalPages })}</span>
+            <button className="page-nav-btn" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages}>{t('pagination.next')}</button>
           </div>
         </div>
       )}
 
-      <div className="fab" onClick={onAddClick}>+ 새 수리 내역 추가하기</div>
+      <div className="fab" onClick={onAddClick}>{t('fab.add')}</div>
     </div>
   )
 }
 
 function DetailScreen({ record, onBack, onDelete, onEdit }) {
+  const { t, formatDate, formatCost } = useLanguage()
   const [photoUrls, setPhotoUrls] = useState([])
 
   useEffect(() => {
@@ -337,14 +329,17 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
     return () => { active = false }
   }, [record.id, record.photo_paths])
 
+  const lifecycleLabel = record.lifecycle_label === 'justRegistered' ? t('lifecycle.justRegistered') : record.lifecycle_label
+  const statusLabel = t('lifecycle.status.' + record.lifecycle_status)
+
   return (
     <div className="app">
       <div className="detail-header">
         <div className="detail-header-left">
-          <div className="back-btn" onClick={onBack} aria-label="뒤로가기">←</div>
-          <span className="header-title">수리 상세</span>
+          <div className="back-btn" onClick={onBack} aria-label={t('detail.back')}>←</div>
+          <span className="header-title">{t('detail.title')}</span>
         </div>
-        <div className="edit-btn" onClick={onEdit}>수정</div>
+        <div className="edit-btn" onClick={onEdit}>{t('detail.edit')}</div>
       </div>
 
       <div className="hero">
@@ -352,53 +347,51 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
           <div className="hero-icon" style={{ background: categoryColors[record.category], color: categoryRing[record.category] }}>{record.icon}</div>
           <div>
             <div className="hero-name">{record.name}</div>
-            <div className="hero-sub">{record.location} · {record.date}</div>
+            <div className="hero-sub">{record.location} · {formatDate(record.date)}</div>
           </div>
         </div>
         <div className="badge-row">
-          <span className="badge badge-install">{record.category_label}</span>
-          <span className="badge badge-pro">{record.diy ? '직접 수리' : '업체 시공'}</span>
+          <span className="badge badge-install">{t('category.' + record.category)}</span>
+          <span className="badge badge-pro">{record.diy ? t('common.diy') : t('common.pro')}</span>
         </div>
       </div>
 
       <div className="stats-grid">
         <div className="stat">
-          <div className="stat-label">지출 비용</div>
+          <div className="stat-label">{t('detail.spend')}</div>
           <div className="stat-val">{formatCost(record.cost)}</div>
         </div>
         <div className="stat">
-          <div className="stat-label">경과</div>
-          <div className="stat-val">{record.lifecycle_label}</div>
+          <div className="stat-label">{t('detail.elapsed')}</div>
+          <div className="stat-val">{lifecycleLabel}</div>
         </div>
         <div className="stat">
-          <div className="stat-label">상태</div>
-          <div className="stat-val">
-            {record.lifecycle_status === 'good' ? '양호' : record.lifecycle_status === 'warn' ? '주의' : '보통'}
-          </div>
+          <div className="stat-label">{t('detail.status')}</div>
+          <div className="stat-val">{statusLabel}</div>
         </div>
       </div>
 
       <div className="section">
-        <div className="section-title">수명주기</div>
+        <div className="section-title">{t('lifecycle.title')}</div>
         <div className="lc-bar">
           <div className="lc-fill" style={{ width: `${record.lifecycle_percent}%`, background: lifecycleColors[record.lifecycle_status] }}></div>
         </div>
       </div>
 
       <div className="section">
-        <div className="section-title">상세 정보</div>
-        <div className="info-row"><span className="info-key">📍 공간</span><span className="info-val">{record.location}</span></div>
-        <div className="info-row"><span className="info-key">📅 날짜</span><span className="info-val">{record.date}</span></div>
-        <div className="info-row"><span className="info-key">🧾 비용</span><span className="info-val">{formatCost(record.cost)}</span></div>
+        <div className="section-title">{t('detail.info')}</div>
+        <div className="info-row"><span className="info-key">{t('detail.space')}</span><span className="info-val">{record.location}</span></div>
+        <div className="info-row"><span className="info-key">{t('detail.date')}</span><span className="info-val">{formatDate(record.date)}</span></div>
+        <div className="info-row"><span className="info-key">{t('detail.cost')}</span><span className="info-val">{formatCost(record.cost)}</span></div>
       </div>
 
       {photoUrls.length > 0 && (
         <div className="section">
-          <div className="section-title">사진</div>
+          <div className="section-title">{t('detail.photos')}</div>
           <div className="photo-scroll">
             {photoUrls.map((p) => (
               <a href={p.url} target="_blank" rel="noreferrer" key={p.path} className="photo-scroll-item">
-                <img src={p.url} alt="수리 내역 사진" />
+                <img src={p.url} alt={t('detail.photoAlt')} />
               </a>
             ))}
           </div>
@@ -407,7 +400,7 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
 
       {!record.diy && record.vendor_name && (
         <div className="section">
-          <div className="section-title">시공 업체</div>
+          <div className="section-title">{t('detail.vendor')}</div>
           <div className="contact-card">
             <div className="contact-left">
               <div className="contact-avatar">🏢</div>
@@ -416,30 +409,31 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
                 <div className="contact-num">{record.vendor_phone}</div>
               </div>
             </div>
-            <a className="call-btn" href={`tel:${record.vendor_phone}`} aria-label="업체에 전화하기">📞</a>
+            <a className="call-btn" href={`tel:${record.vendor_phone}`} aria-label={t('detail.callAria')}>📞</a>
           </div>
         </div>
       )}
 
       <div className="section">
-        <div className="section-title">메모</div>
-        <div className="memo-box">{record.memo}</div>
+        <div className="section-title">{t('detail.memo')}</div>
+        <div className="memo-box">{record.memo || t('detail.noMemo')}</div>
       </div>
 
       <div className="delete-section">
-        <button className="delete-btn" onClick={onDelete}>🗑 삭제하기</button>
+        <button className="delete-btn" onClick={onDelete}>{t('detail.delete')}</button>
       </div>
     </div>
   )
 }
 
 function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceDelete }) {
+  const { t } = useLanguage()
   const isEditing = !!editingRecord
   const [name, setName] = useState(editingRecord?.name || '')
   const [space, setSpace] = useState(editingRecord?.location || '')
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customInput, setCustomInput] = useState('')
-  const [date, setDate] = useState(editingRecord ? koreanDateToISO(editingRecord.date) : new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(editingRecord ? dateToInputValue(editingRecord.date) : new Date().toISOString().split('T')[0])
   const [cost, setCost] = useState(editingRecord?.cost ? String(editingRecord.cost) : '')
   const [category, setCategory] = useState(editingRecord?.category || '')
   const [diy, setDiy] = useState(editingRecord ? editingRecord.diy : true)
@@ -475,13 +469,13 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
     const files = Array.from(e.target.files || [])
     const remaining = MAX_PHOTOS_PER_RECORD - totalPhotoCount
     if (remaining <= 0) {
-      alert(`사진은 최대 ${MAX_PHOTOS_PER_RECORD}장까지 추가할 수 있어요.`)
+      alert(t('alert.photoMax', { max: MAX_PHOTOS_PER_RECORD }))
       e.target.value = ''
       return
     }
     const toAdd = files.slice(0, remaining)
     if (files.length > toAdd.length) {
-      alert(`최대 ${MAX_PHOTOS_PER_RECORD}장까지만 추가되어 일부 사진은 제외됐어요.`)
+      alert(t('alert.photoMaxPartial', { max: MAX_PHOTOS_PER_RECORD }))
     }
     setNewPhotoFiles((prev) => [...prev, ...toAdd])
     e.target.value = ''
@@ -497,11 +491,11 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   }
 
   async function handleSubmit() {
-    if (!name.trim()) { alert('항목명을 입력해주세요'); return }
-    if (!space) { alert('공간을 선택해주세요'); return }
-    if (Number(cost) < 0) { alert('비용은 0원 이상으로 입력해주세요'); return }
+    if (!name.trim()) { alert(t('alert.nameRequired')); return }
+    if (!space) { alert(t('alert.spaceRequired')); return }
+    if (Number(cost) < 0) { alert(t('alert.costInvalid')); return }
     if (!diy && vendorPhone && !/^[0-9-]{7,15}$/.test(vendorPhone.trim())) {
-      alert('업체 연락처 형식을 확인해주세요 (숫자와 - 만 입력)')
+      alert(t('alert.vendorPhoneInvalid'))
       return
     }
     setSaving(true)
@@ -515,41 +509,41 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
       } catch (error) {
         setUploadingPhotos(false)
         setSaving(false)
-        alert('사진 업로드 중 오류가 발생했어요: ' + error.message)
+        alert(t('alert.photoUploadError', { message: error.message }))
         return
       }
       setUploadingPhotos(false)
     }
 
-    const dateObj = new Date(date)
-    const dateLabel = `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`
-    const catInfo = categories.find((c) => c.value === category) || categories[0]
+    // 날짜는 항상 ISO(YYYY-MM-DD) 형식으로 저장한다. 기존에 저장된 한글 텍스트 날짜는
+    // 그대로 유지되며, 화면에는 formatDate()가 두 형식을 모두 인식해서 보여준다.
+    const catValue = category || categories[0]
     const finalPhotoPaths = [...existingPhotos.map((p) => p.path), ...uploadedPaths]
     const recordData = {
       name: name.trim(),
-      icon: categoryIcons[catInfo.value] || '🛠️',
-      category: catInfo.value,
-      category_label: catInfo.label,
-      date: dateLabel,
+      icon: categoryIcons[catValue] || '🛠️',
+      category: catValue,
+      category_label: t('category.' + catValue),
+      date,
       location: space,
       cost: Math.max(0, Number(cost) || 0),
       diy,
       vendor_name: diy ? null : vendorName,
       vendor_phone: diy ? null : vendorPhone,
-      memo: memo.trim() || '메모 없음',
+      memo: memo.trim(),
       user_id: user.id,
       photo_paths: finalPhotoPaths,
     }
     if (isEditing) {
       const { data, error } = await supabase.from('repairs').update(recordData).eq('id', editingRecord.id).select()
       setSaving(false)
-      if (error) { alert('수정 중 오류: ' + error.message); return }
+      if (error) { alert(t('alert.updateError', { message: error.message })); return }
       if (removedPaths.length > 0) deleteRepairPhotos(removedPaths)
       onSave(data[0])
     } else {
-      const { data, error } = await supabase.from('repairs').insert({ ...recordData, lifecycle_percent: 0, lifecycle_label: '등록 직후', lifecycle_status: 'good' }).select()
+      const { data, error } = await supabase.from('repairs').insert({ ...recordData, lifecycle_percent: 0, lifecycle_label: 'justRegistered', lifecycle_status: 'good' }).select()
       setSaving(false)
-      if (error) { alert('저장 중 오류: ' + error.message); return }
+      if (error) { alert(t('alert.saveError', { message: error.message })); return }
       onSave(data[0])
     }
   }
@@ -558,33 +552,33 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
     <div className="app">
       <div className="detail-header">
         <div className="detail-header-left">
-          <div className="back-btn" onClick={onBack} aria-label="뒤로가기">←</div>
-          <span className="header-title">{isEditing ? '내역 수정' : '새 수리 내역'}</span>
+          <div className="back-btn" onClick={onBack} aria-label={t('detail.back')}>←</div>
+          <span className="header-title">{isEditing ? t('add.titleEdit') : t('add.titleNew')}</span>
         </div>
       </div>
       <div className="form-body">
         <div className="field">
-          <div className="field-label">항목명</div>
-          <input type="text" placeholder="예: 보일러 필터 교체" value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="field-label">{t('add.nameLabel')}</div>
+          <input type="text" placeholder={t('add.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="field">
-          <div className="field-label">공간</div>
+          <div className="field-label">{t('add.spaceLabel')}</div>
           <div className="space-grid">
             {spaces.map((s) => (
               <div key={s.id} className={`space-btn ${space === s.name ? 'active' : ''}`} onClick={() => setSpace(s.name)}>
                 {s.name}
                 {!s.is_default && (
-                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }} aria-label={`${s.name} 삭제`}>✕</span>
+                  <span className="space-delete" onClick={(e) => { e.stopPropagation(); onSpaceDelete(s.id) }} aria-label={t('add.spaceDeleteAria', { name: s.name })}>✕</span>
                 )}
               </div>
             ))}
-            <div className="space-btn space-btn-add" onClick={() => setShowCustomInput(true)}>+ 추가</div>
+            <div className="space-btn space-btn-add" onClick={() => setShowCustomInput(true)}>{t('add.spaceAdd')}</div>
           </div>
           {showCustomInput && (
             <div className="custom-space-row">
               <input
                 type="text"
-                placeholder="예: 침실2, 서재"
+                placeholder={t('add.spacePlaceholder')}
                 value={customInput}
                 onChange={(e) => setCustomInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -596,73 +590,73 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
               />
               <button className="custom-space-confirm" onClick={() => {
                 if (customInput.trim()) { onSpaceAdd(customInput.trim()); setSpace(customInput.trim()); setCustomInput(''); setShowCustomInput(false) }
-              }}>확인</button>
+              }}>{t('add.spaceConfirm')}</button>
             </div>
           )}
         </div>
         <div className="field">
-          <div className="field-label">날짜</div>
+          <div className="field-label">{t('add.dateLabel')}</div>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div className="field">
-          <div className="field-label">비용</div>
+          <div className="field-label">{t('add.costLabel')}</div>
           <div className="cost-row">
             <span className="cost-prefix">₩</span>
             <input type="number" min="0" placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} />
           </div>
         </div>
         <div className="field">
-          <div className="field-label">카테고리</div>
+          <div className="field-label">{t('add.categoryLabel')}</div>
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">선택하세요</option>
-            {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            <option value="">{t('category.placeholder')}</option>
+            {categories.map((c) => <option key={c} value={c}>{t('category.' + c)}</option>)}
           </select>
         </div>
         <div className="toggle-row">
           <div>
-            <div className="toggle-label">직접 수리</div>
-            <div className="toggle-sub">{diy ? '업체 없이 직접 했어요' : '업체를 통해 수리했어요'}</div>
+            <div className="toggle-label">{t('add.diyLabel')}</div>
+            <div className="toggle-sub">{diy ? t('add.diySubOn') : t('add.diySubOff')}</div>
           </div>
           <button className={`toggle ${diy ? 'on' : ''}`} onClick={() => setDiy(!diy)}></button>
         </div>
         {!diy && (
           <div className="vendor-box open">
-            <div className="field-label">업체명</div>
-            <input type="text" placeholder="예: ○○소방설비" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
-            <div className="field-label" style={{ marginTop: '4px' }}>업체 연락처</div>
-            <input type="tel" placeholder="010-0000-0000" value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
+            <div className="field-label">{t('add.vendorNameLabel')}</div>
+            <input type="text" placeholder={t('add.vendorNamePlaceholder')} value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+            <div className="field-label" style={{ marginTop: '4px' }}>{t('add.vendorPhoneLabel')}</div>
+            <input type="tel" placeholder={t('add.vendorPhonePlaceholder')} value={vendorPhone} onChange={(e) => setVendorPhone(e.target.value)} />
           </div>
         )}
         <div className="field">
-          <div className="field-label">사진 (최대 {MAX_PHOTOS_PER_RECORD}장)</div>
+          <div className="field-label">{t('add.photoLabel', { max: MAX_PHOTOS_PER_RECORD })}</div>
           <div className="photo-grid">
             {existingPhotos.map((p) => (
               <div className="photo-thumb" key={p.path}>
-                <img src={p.url} alt="첨부 사진" />
-                <span className="photo-remove" onClick={() => removeExistingPhoto(p.path)} aria-label="사진 삭제">✕</span>
+                <img src={p.url} alt={t('add.photoAlt')} />
+                <span className="photo-remove" onClick={() => removeExistingPhoto(p.path)} aria-label={t('add.photoRemoveAria')}>✕</span>
               </div>
             ))}
             {newPhotoFiles.map((file, i) => (
               <div className="photo-thumb" key={`new-${i}`}>
-                <img src={newPhotoPreviews[i]} alt="첨부 사진" />
-                <span className="photo-remove" onClick={() => removeNewPhoto(i)} aria-label="사진 삭제">✕</span>
+                <img src={newPhotoPreviews[i]} alt={t('add.photoAlt')} />
+                <span className="photo-remove" onClick={() => removeNewPhoto(i)} aria-label={t('add.photoRemoveAria')}>✕</span>
               </div>
             ))}
             {totalPhotoCount < MAX_PHOTOS_PER_RECORD && (
               <label className="photo-add">
-                + 추가
+                {t('add.photoAdd')}
                 <input type="file" accept="image/*" multiple onChange={handleFileSelect} style={{ display: 'none' }} />
               </label>
             )}
           </div>
-          {uploadingPhotos && <div className="photo-uploading-hint">사진 업로드 중...</div>}
+          {uploadingPhotos && <div className="photo-uploading-hint">{t('add.photoUploading')}</div>}
         </div>
         <div className="field">
-          <div className="field-label">메모</div>
-          <textarea placeholder="추가로 기억해두고 싶은 내용을 적어요" value={memo} onChange={(e) => setMemo(e.target.value)}></textarea>
+          <div className="field-label">{t('add.memoLabel')}</div>
+          <textarea placeholder={t('add.memoPlaceholder')} value={memo} onChange={(e) => setMemo(e.target.value)}></textarea>
         </div>
         <button className="save-btn" onClick={handleSubmit} disabled={saving}>
-          {saving ? '저장 중...' : isEditing ? '수정 완료' : '저장하기'}
+          {saving ? t('add.saveBtnSaving') : isEditing ? t('add.saveBtnEditDone') : t('add.saveBtn')}
         </button>
       </div>
     </div>
@@ -687,6 +681,7 @@ function ListRoute({ records, user, loading, fetchError, onRetry, onLogout, onWi
 }
 
 function DetailRoute({ records, onDelete }) {
+  const { t } = useLanguage()
   const { id } = useParams()
   const navigate = useNavigate()
   const record = records.find((r) => String(r.id) === id)
@@ -695,8 +690,8 @@ function DetailRoute({ records, onDelete }) {
     return (
       <div className="app">
         <div className="empty-hint" style={{ paddingTop: '40px' }}>
-          내역을 찾을 수 없어요.
-          <div className="fab" onClick={() => navigate('/')}>목록으로 돌아가기</div>
+          {t('empty.notFound')}
+          <div className="fab" onClick={() => navigate('/')}>{t('empty.backToList')}</div>
         </div>
       </div>
     )
@@ -732,7 +727,8 @@ function AddRoute({ records, spaces, onSave, onSpaceAdd, onSpaceDelete }) {
   )
 }
 
-function App() {
+function AppContent() {
+  const { t } = useLanguage()
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [records, setRecords] = useState([])
@@ -763,7 +759,7 @@ function App() {
     setFetchError(null)
     const { data: { user } } = await supabase.auth.getUser()
     const { data, error } = await supabase.from('repairs').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-    if (error) { console.error(error); setFetchError('수리 내역을 불러오지 못했어요. 네트워크 상태를 확인해주세요.') } else { setRecords(data) }
+    if (error) { console.error(error); setFetchError(t('error.fetchFailed')) } else { setRecords(data) }
     setLoading(false)
   }
 
@@ -773,16 +769,14 @@ function App() {
   }
 
   async function handleLogout() {
-    const confirmed = confirm('로그아웃 하시겠어요?')
+    const confirmed = confirm(t('list.logoutConfirm'))
     if (!confirmed) return
     await supabase.auth.signOut()
     setRecords([])
   }
 
   async function handleWithdraw() {
-    const confirmed = confirm(
-      '정말 탈퇴하시겠어요?\n\n등록된 모든 수리 내역, 사진, 공간 정보가 영구적으로 삭제되며 복구할 수 없습니다.'
-    )
+    const confirmed = confirm(t('list.withdrawConfirm'))
     if (!confirmed) return
 
     const { data: { user: currentUser } } = await supabase.auth.getUser()
@@ -793,7 +787,7 @@ function App() {
 
     const { error: repairsError } = await supabase.from('repairs').delete().eq('user_id', currentUser.id)
     if (repairsError) {
-      alert('탈퇴 처리 중 오류가 발생했어요: ' + repairsError.message)
+      alert(t('alert.withdrawError', { message: repairsError.message }))
       return
     }
 
@@ -803,7 +797,7 @@ function App() {
     await supabase.auth.signOut()
     setRecords([])
     setSpaces([])
-    alert('탈퇴가 완료됐어요. 모든 데이터가 삭제되었습니다.')
+    alert(t('list.withdrawSuccess'))
   }
 
   function handleSave(savedRecord) {
@@ -815,11 +809,11 @@ function App() {
   }
 
   async function handleDelete(id) {
-    const confirmed = confirm('정말 삭제하시겠어요?')
+    const confirmed = confirm(t('alert.deleteConfirm'))
     if (!confirmed) return false
     const target = records.find((r) => r.id === id)
     const { error } = await supabase.from('repairs').delete().eq('id', id)
-    if (error) { alert('삭제 중 오류: ' + error.message); return false }
+    if (error) { alert(t('alert.deleteError', { message: error.message })); return false }
     if (target?.photo_paths?.length) deleteRepairPhotos(target.photo_paths)
     setRecords((prev) => prev.filter((r) => r.id !== id))
     return true
@@ -836,7 +830,7 @@ function App() {
     if (!error) setSpaces((prev) => prev.filter((s) => s.id !== id))
   }
 
-  if (authLoading) return <div className="app"><div className="empty-hint" style={{paddingTop:'40px'}}>로딩 중...</div></div>
+  if (authLoading) return <div className="app"><div className="empty-hint" style={{paddingTop:'40px'}}>{t('loading.auth')}</div></div>
   if (!user) return <LoginScreen />
 
   return (
@@ -871,6 +865,14 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+  )
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   )
 }
 
