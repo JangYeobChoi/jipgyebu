@@ -174,7 +174,9 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
   return (
     <div className="app">
       <div className="beta-banner">
-        {t('beta.banner')}
+        {t('beta.bannerBefore')}
+        <a className="beta-banner-link" href="mailto:yeobby@gmail.com">{t('beta.bannerLink')}</a>
+        {t('beta.bannerAfter')}
       </div>
       <div className="header">
         <div className="header-top">
