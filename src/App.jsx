@@ -23,12 +23,6 @@ const categoryIcons = {
   repair: '🔧',
 }
 
-const lifecycleColors = {
-  good: '#4C7A2E',
-  ok: '#2F6690',
-  warn: '#B06423',
-}
-
 const categories = ['replace', 'repair', 'install']
 
 function computeYearlyStats(records) {
@@ -283,18 +277,6 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
               <span className="tag tag-photo">📷 {record.photo_paths.length}</span>
             )}
           </div>
-          <div className="lifecycle-bar-wrap">
-            <div className="lifecycle-label">
-              <span>{t('lifecycle.title')}</span>
-              <span>{record.lifecycle_label === 'justRegistered' ? t('lifecycle.justRegistered') : record.lifecycle_label}</span>
-            </div>
-            <div className="lifecycle-bar">
-              <div
-                className="lifecycle-fill"
-                style={{ width: `${record.lifecycle_percent}%`, background: lifecycleColors[record.lifecycle_status] }}
-              ></div>
-            </div>
-          </div>
         </div>
       ))}
 
@@ -331,9 +313,6 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
     return () => { active = false }
   }, [record.id, record.photo_paths])
 
-  const lifecycleLabel = record.lifecycle_label === 'justRegistered' ? t('lifecycle.justRegistered') : record.lifecycle_label
-  const statusLabel = t('lifecycle.status.' + record.lifecycle_status)
-
   return (
     <div className="app">
       <div className="detail-header">
@@ -355,28 +334,6 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
         <div className="badge-row">
           <span className="badge badge-install">{t('category.' + record.category)}</span>
           <span className="badge badge-pro">{record.diy ? t('common.diy') : t('common.pro')}</span>
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat">
-          <div className="stat-label">{t('detail.spend')}</div>
-          <div className="stat-val">{formatCost(record.cost)}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">{t('detail.elapsed')}</div>
-          <div className="stat-val">{lifecycleLabel}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">{t('detail.status')}</div>
-          <div className="stat-val">{statusLabel}</div>
-        </div>
-      </div>
-
-      <div className="section">
-        <div className="section-title">{t('lifecycle.title')}</div>
-        <div className="lc-bar">
-          <div className="lc-fill" style={{ width: `${record.lifecycle_percent}%`, background: lifecycleColors[record.lifecycle_status] }}></div>
         </div>
       </div>
 
@@ -543,6 +500,8 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
       if (removedPaths.length > 0) deleteRepairPhotos(removedPaths)
       onSave(data[0])
     } else {
+      // 수명주기 관련 컬럼(lifecycle_percent/label/status)은 화면에서는 더 이상 쓰지 않지만,
+      // DB 컬럼이 NOT NULL일 수 있어 저장 실패를 막기 위해 값은 계속 채워서 보냄
       const { data, error } = await supabase.from('repairs').insert({ ...recordData, lifecycle_percent: 0, lifecycle_label: 'justRegistered', lifecycle_status: 'good' }).select()
       setSaving(false)
       if (error) { alert(t('alert.saveError', { message: error.message })); return }

@@ -333,19 +333,6 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 }
 .photo-scroll-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-
-.lifecycle-bar-wrap { margin-top: 10px; }
-.lifecycle-label { font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; display: flex; justify-content: space-between; }
-
-.lifecycle-bar {
-  height: 4px;
-  background: var(--ink-tint);
-  border-radius: 2px;
-  overflow: hidden;
-  background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), var(--paper) 25%);
-}
-.lifecycle-fill { height: 100%; border-radius: 2px; }
-
 .pagination-row {
   display: flex;
   justify-content: space-between;
@@ -451,24 +438,8 @@ body { margin: 0; font-family: var(--font-body); background: var(--paper); }
 .badge-install { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
 .badge-pro { background: var(--stamp-soft); color: var(--stamp); border-color: var(--stamp-line); }
 
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.stat { padding: 8px 10px; border-right: 1px dashed var(--line-strong); }
-.stat:last-child { border-right: none; }
-
-.stat-val {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 15px; font-weight: 600; color: var(--ink);
-}
-
 .section { padding: 16px; border-bottom: 1px solid var(--line); }
 .section-title { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
-
-.lc-bar {
-  height: 7px; background: var(--ink-tint); border-radius: 4px; overflow: hidden;
-  background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), var(--paper) 25%);
-}
-.lc-fill { height: 100%; border-radius: 4px; }
 
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--line); }
 .info-row:last-child { border-bottom: none; }
