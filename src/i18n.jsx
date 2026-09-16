@@ -19,10 +19,6 @@ const dict = {
     'login.hint': 'Google 계정만 있으면 별도 가입 없이 바로 이용할 수 있어요',
     'alert.loginError': '로그인 중 오류가 발생했어요: {message}',
 
-    'beta.bannerBefore': '🧪 베타 테스트 중입니다. 오류나 불편한 점이 있으면 ',
-    'beta.bannerLink': '이메일로 알려주세요',
-    'beta.bannerAfter': ' 큰 도움이 됩니다.',
-
     'list.addButton': '+ 내역 추가',
     'list.logout': '로그아웃',
     'list.logoutConfirm': '로그아웃 하시겠어요?',
@@ -161,10 +157,6 @@ const dict = {
     'login.hint': "No separate sign-up needed — just use your Google account",
     'alert.loginError': 'Sign-in error: {message}',
 
-    'beta.bannerBefore': "🧪 This is a beta version. If you run into a bug or anything inconvenient, ",
-    'beta.bannerLink': 'let us know by email',
-    'beta.bannerAfter': ' — it really helps.',
-
     'list.addButton': '+ Add Record',
     'list.logout': 'Log Out',
     'list.logoutConfirm': 'Are you sure you want to log out?',
@@ -302,10 +294,6 @@ const dict = {
     'login.loading': 'Iniciando sesión...',
     'login.hint': 'No necesitas registrarte por separado, solo usa tu cuenta de Google',
     'alert.loginError': 'Error al iniciar sesión: {message}',
-
-    'beta.bannerBefore': '🧪 Esta es una versión beta. Si encuentras un error o algo incómodo, ',
-    'beta.bannerLink': 'avísanos por correo',
-    'beta.bannerAfter': ' — nos ayuda mucho.',
 
     'list.addButton': '+ Añadir registro',
     'list.logout': 'Cerrar sesión',
