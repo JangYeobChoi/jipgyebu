@@ -61,7 +61,7 @@ function buildCSV(records, i18n) {
     formatDate(r.date),
     r.cost,
     t('category.' + r.category),
-    r.diy ? t('common.diy') : t('common.pro'),
+    r.category === 'utility' ? '' : (r.diy ? t('common.diy') : t('common.pro')),
     r.vendor_name || '',
     r.vendor_phone || '',
     r.memo || '',
@@ -264,7 +264,7 @@ function ListScreen({ records, onSelect, onAddClick, onLogout, onWithdraw, user,
               </div>
               <div>
                 <div className="record-name">{record.name}</div>
-                <div className="record-meta">{formatDate(record.date)} · {record.diy ? t('common.diy') : t('common.pro')}</div>
+                <div className="record-meta">{formatDate(record.date)}{record.category !== 'utility' && ` · ${record.diy ? t('common.diy') : t('common.pro')}`}</div>
               </div>
             </div>
             <div className="record-cost">{formatCost(record.cost)}</div>
@@ -331,7 +331,9 @@ function DetailScreen({ record, onBack, onDelete, onEdit }) {
         </div>
         <div className="badge-row">
           <span className="badge badge-install">{t('category.' + record.category)}</span>
-          <span className="badge badge-pro">{record.diy ? t('common.diy') : t('common.pro')}</span>
+          {record.category !== 'utility' && (
+            <span className="badge badge-pro">{record.diy ? t('common.diy') : t('common.pro')}</span>
+          )}
         </div>
       </div>
 
@@ -394,6 +396,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
   const [cost, setCost] = useState(editingRecord?.cost ? String(editingRecord.cost) : '')
   const [category, setCategory] = useState(editingRecord?.category || '')
   const [diy, setDiy] = useState(editingRecord ? editingRecord.diy : true)
+  const isUtility = category === 'utility' // 공과금은 직접 수리/업체 시공 구분이 필요 없음
   const [vendorName, setVendorName] = useState(editingRecord?.vendor_name || '')
   const [vendorPhone, setVendorPhone] = useState(editingRecord?.vendor_phone || '')
   const [memo, setMemo] = useState(editingRecord?.memo === '메모 없음' ? '' : (editingRecord?.memo || ''))
@@ -451,7 +454,7 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
     if (!name.trim()) { alert(t('alert.nameRequired')); return }
     if (!space) { alert(t('alert.spaceRequired')); return }
     if (Number(cost) < 0) { alert(t('alert.costInvalid')); return }
-    if (!diy && vendorPhone && !/^[0-9-]{7,15}$/.test(vendorPhone.trim())) {
+    if (!isUtility && !diy && vendorPhone &&!/^[0-9-]{7,15}$/.test(vendorPhone.trim())) {
       alert(t('alert.vendorPhoneInvalid'))
       return
     }
@@ -484,9 +487,9 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
       date,
       location: space,
       cost: Math.max(0, Number(cost) || 0),
-      diy,
-      vendor_name: diy ? null : vendorName,
-      vendor_phone: diy ? null : vendorPhone,
+      diy: isUtility ? false : diy,
+      vendor_name: isUtility || diy ? null : vendorName,
+      vendor_phone: isUtility || diy ? null : vendorPhone,
       memo: memo.trim(),
       user_id: user.id,
       photo_paths: finalPhotoPaths,
@@ -571,14 +574,16 @@ function AddScreen({ onBack, onSave, editingRecord, spaces, onSpaceAdd, onSpaceD
             {categories.map((c) => <option key={c} value={c}>{t('category.' + c)}</option>)}
           </select>
         </div>
-        <div className="toggle-row">
-          <div>
-            <div className="toggle-label">{t('add.diyLabel')}</div>
-            <div className="toggle-sub">{diy ? t('add.diySubOn') : t('add.diySubOff')}</div>
+        {!isUtility && (
+          <div className="toggle-row">
+            <div>
+              <div className="toggle-label">{t('add.diyLabel')}</div>
+              <div className="toggle-sub">{diy ? t('add.diySubOn') : t('add.diySubOff')}</div>
+            </div>
+            <button className={`toggle ${diy ? 'on' : ''}`} onClick={() => setDiy(!diy)}></button>
           </div>
-          <button className={`toggle ${diy ? 'on' : ''}`} onClick={() => setDiy(!diy)}></button>
-        </div>
-        {!diy && (
+        )}
+        {!isUtility && !diy && (
           <div className="vendor-box open">
             <div className="field-label">{t('add.vendorNameLabel')}</div>
             <input type="text" placeholder={t('add.vendorNamePlaceholder')} value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
