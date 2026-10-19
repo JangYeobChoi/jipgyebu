@@ -69,6 +69,7 @@ const dict = {
     'category.replace': '교체',
     'category.repair': '수리',
     'category.install': '설치',
+    'category.utility': '공과금',
     'category.placeholder': '선택하세요',
 
     'detail.back': '뒤로가기',
@@ -207,6 +208,7 @@ const dict = {
     'category.replace': 'Replace',
     'category.repair': 'Repair',
     'category.install': 'Install',
+    'category.utility': 'Utilities',
     'category.placeholder': 'Select',
 
     'detail.back': 'Back',
@@ -345,6 +347,7 @@ const dict = {
     'category.replace': 'Reemplazo',
     'category.repair': 'Reparación',
     'category.install': 'Instalación',
+    'category.utility': 'Servicios (facturas)',
     'category.placeholder': 'Selecciona',
 
     'detail.back': 'Volver',

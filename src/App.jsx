@@ -9,21 +9,24 @@ const categoryColors = {
   replace: '#EFDFB0',
   install: '#D7E2C0',
   repair: '#C7D9E6',
+  utility: '#E6D3E4',
 }
 
 const categoryRing = {
   replace: '#96731F',
   install: '#4C6B27',
   repair: '#2F5E82',
+  utility: '#7A4A78',
 }
 
 const categoryIcons = {
   replace: '🔄',
   install: '🛠️',
   repair: '🔧',
+  utility: '💡',
 }
 
-const categories = ['replace', 'repair', 'install']
+const categories = ['replace', 'repair', 'install', 'utility']
 
 function computeYearlyStats(records) {
   const map = new Map()
